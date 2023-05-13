@@ -1,0 +1,8 @@
+# everything nogit
+*.nogit
+
+__pycache__/
+*.py[cod]
+
+
+
