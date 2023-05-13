@@ -1,0 +1,5 @@
+CREATE USER wpartists IDENTIFIED BY wpartists##123;
+
+GRANT CONNECT, RESOURCE to wpartists;
+
+ALTER USER wpartists QUOTA UNLIMITED on USERS;
