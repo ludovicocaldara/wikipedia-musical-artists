@@ -281,49 +281,62 @@ class MusicalArtist:
       return ( re.split(separators, string))
 
   ####################################################
-  # take a parameter to split as a list and put it in a new list
-  # the "key" parameter is the dict key for the new list
-  def _split_list (self, param, key):
-    if not key in self.doc:
-      self.doc[key] = list()
+  # take a musical artist infobox parameter to split as a list and put it in a new list.
+  # returns a new list to be used by the calling function.
+  # it's more than a string split, as it has to take into account several listing possibilities of wikipedia.
+  # Again, the template doc says it should be hlist, flatlist, or comma separated, but there are too many exceptions
+  # like <br/>, or templates like unbullet lists, etc. So I try to cover as much as possible in this function.
+  def _split_list (self, param):
+    ret_list = list()
 
     value = param.value.strip()
     value = self._lint_value(value)
     print ("trying splitting "+ value)
-    # we can have HList, FlatList or comma-separated
+
+    param_name = self._lint_value(param.name.strip())
+
+    # we get the templates from within the property value: we can have HList, FlatList, others, or no templates (comma-separated)
+    logging.debug('Looking for templates to split in: %s' , value,  extra={"artist":self.name})
     templates = mwparserfromhell.parse(value).filter_templates()
+
     if len(templates) == 0:
-      print ("detected type comma")
-      splitted_list = self._split_string(value)
-      for item in splitted_list:
-        self.doc[key].append({param.name.strip(): item})
+      logging.debug('No templates detected. Splitting %s using comma-ish separations', param_name,  extra={"artist":self.name})
+      return self._split_string(value)
 
     else:
       for template in templates:
+        template_name = self._lint_value(template.name.strip())
+        logging.debug('Found template: %s', template_name,  extra={"artist":self.name})
 
-        if template.name.strip().lower() == 'flatlist':
-          print ("detected type flatlist")
+        if template_name.lower() == 'flatlist':
           for item in template.params:
-            print ("item --- " + param.name.strip() + ":" + item.value.strip())
-            splitted_list = self._split_string(item.value.strip())
-            for item in splitted_list:
-              self.doc[key].append({param.name.strip(): item})
+            logging.debug('Splitting %s flatlist item: %s', param_name, item.value.strip(),  extra={"artist":self.name})
+            ret_list.append(self._split_string(item.value.strip()))
+          return ret_list
 
-            #self.doc[key].append({param.name.strip(): self._lint_value(item.value.strip())})
 
-        elif template.name.strip().lower() in [ 'hlist', 'ubl','unbullet list']:
-          print ("detected type hlist")
+        elif template_name.lower() in [ 'hlist', 'ubl','unbullet list']:
+
           for item in template.params:
-            print ("item --- " + param.name.strip() + ":" + item.value.strip())
-            self.doc[key].append({param.name.strip(): self._lint_value(item.value.strip())})
+            logging.debug('Splitted %s %s item: %s', param_name, template_name, item.value.strip(),  extra={"artist":self.name})
+
+            ret_list.append(self._lint_value(item.value.strip()))
+          return ret_list
+        else:
+          logging.debug('Unknown template for list: %s', template_name,  extra={"artist":self.name})
 
 
-    #self.doc[key].append({param.name.strip(): self._lint_value(param.value.strip())})
-
-
-
-
-
+  ####################################################
+  # Function to split name and link.
+  # e.g.
+  #        "[[Dan Gilroy (musician)|Dan Gilroy]]",  => {'name':'Dan Gilroy','link':'Dan Gilroy (musician)'}
+  #        "[[Stephen Bray]]", => {'name':'Stephen Bray','link':'Stephen Bray'}
+  #        "Paul Kauk", => {'name':'Paul Kauk','link':''}
+  #
+  # the idea is to keep the mw page for more robust discovery: collect the name and the link, discover using the link, try the name if the link is not there.
+  # so if an artist is not discoverable, the link can be searched and updated manually
+  def _split_name_link(self, mwlink):
+    pass
 
   ####################################################
   # these params require special treatment
@@ -338,27 +351,27 @@ class MusicalArtist:
       self.doc['image'][param_name] = self._lint_value(param.value.strip())
 
     elif param_name == 'label':
-      self._split_list(param, 'labels')
+      self.doc['labels'] = list(self._split_list(param))
     elif param_name == 'alias':
-      self._split_list(param, 'aliases')
+      self.doc['aliases'] = list(self._split_list(param))
     elif param_name == 'genre':
-      self._split_list(param, 'genres')
+      self.doc['genres'] = list(self._split_list(param))
     elif param_name == 'associated_acts':
-      self._split_list(param, 'associated_acts')
+      self.doc['associated_acts'] = list(self._split_list(param))
     elif param_name == 'occupation':
-      self._split_list(param, 'occupations')
+      self.doc['occupations'] = list(self._split_list(param))
     elif param_name == 'instrument':
-      self._split_list(param, 'instruments')
+      self.doc['instruments'] = list(self._split_list(param))
     elif param_name == 'current_member_of':
-      self._split_list(param, 'current_member_of')
+      self.doc['current_member_of'] = list(self._split_list(param))
     elif param_name == 'past_member_of':
-      self._split_list(param, 'past_member_of')
+      self.doc['past_member_of'] = list(self._split_list(param))
     elif param_name == 'spinoffs':
-      self._split_list(param, 'spinoffs')
+      self.doc['spinoffs'] = list(self._split_list(param))
     elif param_name == 'current_members':
-      self._split_list(param, 'current_members')
+      self.doc['current_members'] = list(self._split_list(param))
     elif param_name == 'past_members':
-      self._split_list(param, 'past_members')
+      self.doc['past_members'] = list(self._split_list(param))
       
 
 #    elif
