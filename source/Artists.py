@@ -263,11 +263,15 @@ class MusicalArtist:
     # remove ref tags
     value = re.sub(r'<ref\b[^>]*\/?>.*?<\/ref>', '', value, flags=re.DOTALL)
 
+    # remove self-closing ref tags
+    value = re.sub(r"<ref\s+[^>]*\s*/>", "", value)
+
     ## remove self-closing tags
     #value = re.sub(r'<[^>]+\/>', '', value)
 
     # remove HTML comments
     value = re.sub("(<!--.*?-->)", "", value, flags=re.DOTALL)
+
 
     # return stripped
     return value.strip()
@@ -277,8 +281,12 @@ class MusicalArtist:
   ####################################################
   # split a flatlist or comma list into items
   def _split_string (self, string):
-      separators = r'<br\/>|<br \/>\n|[\n,]'
-      return ( re.split(separators, string))
+      separators = r'<br\/>|<br \/>|\n|, |,|\u2022'
+
+      # Flatlists often use "^\* " as line heading, so better filter it out here with a lambda
+      return ( list(map(lambda item: item.lstrip("* "), re.split(separators, string))))
+
+
 
   ####################################################
   # take a musical artist infobox parameter to split as a list and put it in a new list.
@@ -291,8 +299,6 @@ class MusicalArtist:
 
     value = param.value.strip()
     value = self._lint_value(value)
-    print ("trying splitting "+ value)
-
     param_name = self._lint_value(param.name.strip())
 
     # we get the templates from within the property value: we can have HList, FlatList, others, or no templates (comma-separated)
@@ -311,7 +317,7 @@ class MusicalArtist:
         if template_name.lower() == 'flatlist':
           for item in template.params:
             logging.debug('Splitting %s flatlist item: %s', param_name, item.value.strip(),  extra={"artist":self.name})
-            ret_list.append(self._split_string(item.value.strip()))
+            ret_list = self._split_string(item.value.strip())
           return ret_list
 
 
@@ -345,33 +351,61 @@ class MusicalArtist:
 
     param_name = self._lint_value(param.name.strip())
     if param_name in ['image', 'image_upright', 'image_size', 'landscape', 'alt', 'caption' ] :
-      logging.debug('Adding image property to the image dict: %s', param_name, extra={"artist":self.name})
-      if not 'image' in self.doc:
-        self.doc['image'] = dict()
-      self.doc['image'][param_name] = self._lint_value(param.value.strip())
+      value = self._lint_value(param.value.strip())
+      if value != '':
+        logging.debug('Adding image property to the image dict: %s', param_name, extra={"artist":self.name})
+        if not 'image' in self.doc:
+          self.doc['image'] = dict()
+        self.doc['image'][param_name] = value
 
-    elif param_name == 'label':
-      self.doc['labels'] = list(self._split_list(param))
-    elif param_name == 'alias':
-      self.doc['aliases'] = list(self._split_list(param))
-    elif param_name == 'genre':
-      self.doc['genres'] = list(self._split_list(param))
-    elif param_name == 'associated_acts':
-      self.doc['associated_acts'] = list(self._split_list(param))
-    elif param_name == 'occupation':
-      self.doc['occupations'] = list(self._split_list(param))
-    elif param_name == 'instrument':
-      self.doc['instruments'] = list(self._split_list(param))
-    elif param_name == 'current_member_of':
-      self.doc['current_member_of'] = list(self._split_list(param))
-    elif param_name == 'past_member_of':
-      self.doc['past_member_of'] = list(self._split_list(param))
-    elif param_name == 'spinoffs':
-      self.doc['spinoffs'] = list(self._split_list(param))
-    elif param_name == 'current_members':
-      self.doc['current_members'] = list(self._split_list(param))
-    elif param_name == 'past_members':
-      self.doc['past_members'] = list(self._split_list(param))
+    elif param_name in [ 'label', 'alias', 'genre', 'associated_acts', 'occupation', 'instrument', 'current_member_of', 'past_member_of', 'spinoffs', 'current_members', 'past_members',]:
+      splitted_list = list(self._split_list(param))
+      logging.debug('Splitted list result: (len:%d) %s', len(splitted_list), splitted_list, extra={"artist":self.name})
+      # we might have an empty string as the only value... this happens if the parameter in the infobox was set without value
+      if len(splitted_list) == 1 and splitted_list[0] == '':
+        logging.debug('Empty value ... skipping', extra={"artist":self.name})
+        return
+
+      if not param_name in self.doc:
+        self.doc[param_name] = list()
+
+      for item in splitted_list:
+        logging.debug('Looking for MW links in: %s', item, extra={"artist":self.name})
+        links = mwparserfromhell.parse(item).filter_wikilinks()
+        if len(links) == 0:
+          logging.debug('no links in %s', item, extra={"artist":self.name})
+          self.doc[param_name].append({'mw_name':'', 'name':item})
+        else:
+          logging.debug('link found in: %s', links[0], extra={"artist":self.name})
+          if not links[0].text:
+            links[0].text = links[0].title
+          # assume just one link, or we are doomed :-/
+          self.doc[param_name].append({'mw_name':links[0].title.strip(), 'name':links[0].text.strip()})
+
+
+
+    #elif param_name == 'label':
+    #  self.doc['labels'] = list(self._split_list(param))
+    #elif param_name == 'alias':
+    #  self.doc['aliases'] = list(self._split_list(param))
+    #elif param_name == 'genre':
+    #  self.doc['genres'] = list(self._split_list(param))
+    #elif param_name == 'associated_acts':
+    #  self.doc['associated_acts'] = list(self._split_list(param))
+    #elif param_name == 'occupation':
+    #  self.doc['occupations'] = list(self._split_list(param))
+    #elif param_name == 'instrument':
+    #  self.doc['instruments'] = list(self._split_list(param))
+    #elif param_name == 'current_member_of':
+    #  self.doc['current_member_of'] = list(self._split_list(param))
+    #elif param_name == 'past_member_of':
+    #  self.doc['past_member_of'] = list(self._split_list(param))
+    #elif param_name == 'spinoffs':
+    #  self.doc['spinoffs'] = list(self._split_list(param))
+    #elif param_name == 'current_members':
+    #  self.doc['current_members'] = list(self._split_list(param))
+    #elif param_name == 'past_members':
+    #  self.doc['past_members'] = list(self._split_list(param))
       
 
 #    elif
