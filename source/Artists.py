@@ -253,7 +253,9 @@ class MusicalArtist:
           # I treat any special parameters in a dedicated function
           self._special_param(param)
 
-    print(json.dumps(self.doc, indent=4))
+
+  def getJson(self):
+    return json.dumps(self.doc, indent=4)
 
 
   ####################################################
