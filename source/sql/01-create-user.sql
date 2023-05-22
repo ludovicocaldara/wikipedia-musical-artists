@@ -8,7 +8,6 @@ grant connect, resource , soda_app to bands;
 
 alter user bands quota unlimited on users;
 
-connect bands/Bands##123@localhost:1521/FREEPDB1
 
 BEGIN
  ords_admin.enable_schema(
@@ -22,4 +21,6 @@ BEGIN
 END;
 /
 
+connect bands/Bands##123@localhost:1521/FREEPDB1
 exec ords.enable_schema;
+commit;
