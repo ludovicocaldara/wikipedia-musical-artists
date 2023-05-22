@@ -223,6 +223,7 @@ class MusicalArtist:
 
     band_specials = [ 'spinoffs', 'spinoff_of', 'current_members', 'past_members', ]
 
+    not_details = ['name','wikipedia_link', 'type', 'genre', 'label', 'associated_acts', 'current_member_of', 'past_member_of', 'spinoffs', 'spinoff_of', 'current_members', 'past_members']
 
     # if we are here without exception, we know if person or band
     # depending on it, I load the list of relevant parameters
@@ -246,16 +247,25 @@ class MusicalArtist:
 
         if param_name in relevant_params:
           logging.info('Found relevant regular parameter: %s', param_name, extra={"artist":self.name})
-          self.doc[param_name] = self._lint_value(param.value.strip())
+          if param_name in not_details:
+            self.doc[param_name] = self._lint_value(param.value.strip())
+          else:
+            self.doc['details'][param_name] = self._lint_value(param.value.strip())
 
         if param_name in relevant_specials:
           logging.info('Found relevant special parameter: %s', param_name, extra={"artist":self.name})
           # I treat any special parameters in a dedicated function
-          self._special_param(param)
+          if param_name in not_details:
+            self._special_param(param, False)
+          else:
+            self._special_param(param)
 
 
   def getJson(self):
     return json.dumps(self.doc, indent=4)
+
+  def getDict(self):
+    return self.doc
 
 
   ####################################################
@@ -323,7 +333,7 @@ class MusicalArtist:
           return ret_list
 
 
-        elif template_name.lower() in [ 'hlist', 'ubl','unbullet list']:
+        elif template_name.lower() in [ 'hlist', 'ubl','unbullet list', 'unbulleted list']:
 
           for item in template.params:
             logging.debug('Splitted %s %s item: %s', param_name, template_name, item.value.strip(),  extra={"artist":self.name})
@@ -348,18 +358,22 @@ class MusicalArtist:
 
   ####################################################
   # these params require special treatment
-  def _special_param(self, param):
-    # image-related parameters
+  def _special_param(self, param, is_detail = True):
 
+    if is_detail and not 'details' in self.doc:
+      self.doc['details'] = dict()
+
+    # image-related parameters. Image is always a detail
     param_name = self._lint_value(param.name.strip())
     if param_name in ['image', 'image_upright', 'image_size', 'landscape', 'alt', 'caption' ] :
       value = self._lint_value(param.value.strip())
       if value != '':
         logging.debug('Adding image property to the image dict: %s', param_name, extra={"artist":self.name})
-        if not 'image' in self.doc:
-          self.doc['image'] = dict()
-        self.doc['image'][param_name] = value
+        if not 'image' in self.doc['details']:
+          self.doc['details']['image'] = dict()
+        self.doc['details']['image'][param_name] = value
 
+    # every other parameter. We want to put everything in details except what's relevant for our analysis
     elif param_name in [ 'label', 'alias', 'genre', 'associated_acts', 'occupation', 'instrument', 'current_member_of', 'past_member_of', 'spinoffs', 'current_members', 'past_members',]:
       splitted_list = list(self._split_list(param))
       logging.debug('Splitted list result: (len:%d) %s', len(splitted_list), splitted_list, extra={"artist":self.name})
@@ -368,47 +382,34 @@ class MusicalArtist:
         logging.debug('Empty value ... skipping', extra={"artist":self.name})
         return
 
-      if not param_name in self.doc:
-        self.doc[param_name] = list()
+      if is_detail:
+        if not param_name in self.doc['details']:
+          self.doc['details'][param_name] = list()
+      else:
+        if not param_name in self.doc:
+          self.doc[param_name] = list()
 
       for item in splitted_list:
         logging.debug('Looking for MW links in: %s', item, extra={"artist":self.name})
         links = mwparserfromhell.parse(item).filter_wikilinks()
         if len(links) == 0:
           logging.debug('no links in %s', item, extra={"artist":self.name})
-          self.doc[param_name].append({'mw_name':'', 'name':item})
+          if is_detail:
+            self.doc['details'][param_name].append({'link':'', 'name':item})
+          else:
+            self.doc[param_name].append({'link':'', 'name':item})
         else:
           logging.debug('link found in: %s', links[0], extra={"artist":self.name})
           if not links[0].text:
             links[0].text = links[0].title
           # assume just one link, or we are doomed :-/
-          self.doc[param_name].append({'mw_name':links[0].title.strip(), 'name':links[0].text.strip()})
+          if is_detail:
+            self.doc['details'][param_name].append({'link':links[0].title.strip(), 'name':links[0].text.strip()})
+          else:
+            self.doc[param_name].append({'link':links[0].title.strip(), 'name':links[0].text.strip()})
 
 
 
-    #elif param_name == 'label':
-    #  self.doc['labels'] = list(self._split_list(param))
-    #elif param_name == 'alias':
-    #  self.doc['aliases'] = list(self._split_list(param))
-    #elif param_name == 'genre':
-    #  self.doc['genres'] = list(self._split_list(param))
-    #elif param_name == 'associated_acts':
-    #  self.doc['associated_acts'] = list(self._split_list(param))
-    #elif param_name == 'occupation':
-    #  self.doc['occupations'] = list(self._split_list(param))
-    #elif param_name == 'instrument':
-    #  self.doc['instruments'] = list(self._split_list(param))
-    #elif param_name == 'current_member_of':
-    #  self.doc['current_member_of'] = list(self._split_list(param))
-    #elif param_name == 'past_member_of':
-    #  self.doc['past_member_of'] = list(self._split_list(param))
-    #elif param_name == 'spinoffs':
-    #  self.doc['spinoffs'] = list(self._split_list(param))
-    #elif param_name == 'current_members':
-    #  self.doc['current_members'] = list(self._split_list(param))
-    #elif param_name == 'past_members':
-    #  self.doc['past_members'] = list(self._split_list(param))
-      
 
 #    elif
 #      'years_active', # -> list

@@ -1,4 +1,4 @@
-connect bands/Bands##123
+connect bands/Bands##123@localhost:1521/FREEPDB1
 
 exec ords.enable_schema;
 commit;
