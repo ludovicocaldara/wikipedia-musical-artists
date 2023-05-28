@@ -250,6 +250,8 @@ class MusicalArtist:
           if param_name in not_details:
             self.doc[param_name] = self._lint_value(param.value.strip())
           else:
+            if not 'details' in self.doc:
+              self.doc['details'] = dict()
             self.doc['details'][param_name] = self._lint_value(param.value.strip())
 
         if param_name in relevant_specials:
