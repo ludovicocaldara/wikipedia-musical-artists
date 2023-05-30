@@ -29,6 +29,36 @@ create or replace json relational duality view band as
           }
 	}
       ]
+    current_member_of : band_members @insert @update @delete @link(to: "MEMBER_ID")
+      [
+        {
+	  current_member_id : id
+          artists @noinsert @update @nodelete @unnest @link(from: "BAND_ID")
+          {
+            id : id
+            name : name
+            link : link
+            type    : type
+            details : details
+            discovered : discovered
+          }
+	}
+      ]
+    past_member_of : band_members @insert @update @delete @link(to: "MEMBER_ID")
+      [
+        {
+	  past_member_id : id
+          artists @noinsert @update @nodelete @unnest @link(from: "BAND_ID")
+          {
+            id : id
+            name : name
+            link : link
+            type    : type
+            details : details
+            discovered : discovered
+          }
+	}
+      ]
     current_members : band_members @insert @update @delete @link(to: "BAND_ID")
       [
         {
@@ -49,6 +79,21 @@ create or replace json relational duality view band as
         {
 	  past_members_id : id
           artists @noinsert @update @nodelete @unnest @link(from: "MEMBER_ID")
+          {
+            id : id
+            name : name
+            link : link
+            type    : type
+            details : details
+            discovered : discovered
+          }
+	}
+      ]
+    spinoff_of : band_spinoffs @insert @update @delete @link(to: "SPINOFF_ID")
+      [
+        {
+	  band_spinoff_id : id
+          artists @noinsert @update @nodelete @unnest @link(from: "BAND_ID")
           {
             id : id
             name : name

@@ -25,7 +25,7 @@ create table artists (
   id               varchar2(30) not null ,
   name             varchar2(255) not null unique,
   link             varchar2(255),
-  type             varchar2(20) not null,
+  type             varchar2(20),
   details          json,
   discovered       boolean default false,
   discover_time    timestamp default on null systimestamp,

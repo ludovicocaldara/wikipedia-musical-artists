@@ -334,7 +334,7 @@ class MWMusicalArtist:
         template_name = self._lint_value(template.name.strip())
         logging.debug('Found template: %s', template_name,  extra={"artist":self.name})
 
-        if template_name.lower() == 'flatlist':
+        if template_name.lower() in ['flatlist', 'plainlist']:
           for item in template.params:
             logging.debug('Splitting %s flatlist item: %s', param_name, item.value.strip(),  extra={"artist":self.name})
             ret_list = self._split_string(item.value.strip())

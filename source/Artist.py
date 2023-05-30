@@ -30,7 +30,7 @@ class Artist:
       genre['id'] = res['_id']
     else:
       res = coll.insert_one(genre)
-      genre['id'] = res.inserted_id
+      genre['id'] = str(res.inserted_id)
     logging.debug('new genre for insertion: %s' , genre, extra={"artist":self.band})
     return genre
 
@@ -45,7 +45,7 @@ class Artist:
       label['id'] = res['_id']
     else:
       res = coll.insert_one(label)
-      label['id'] = res.inserted_id
+      label['id'] = str(res.inserted_id)
     logging.debug('new label for insertion: %s' , label, extra={"artist":self.band})
     return label
 
@@ -55,6 +55,7 @@ class Artist:
   def getOrInsertArtist (self, artist):
     #for searching a previous artist, we require only the name, as it's unique
     search = dict({"name":artist["name"]})
+    logging.debug('search condition: %s' , search, extra={"artist":self.band})
     coll = self.mongo_db['band']
     res = coll.find_one(search)
     # if it's already there, we rather set the artist with the full details of the result
@@ -63,8 +64,8 @@ class Artist:
       logging.debug('found existing artist: %s' , artist['name'], extra={"artist":self.band})
       # we delete the _id as we don't want it as _id but _id
       artist['id'] = artist['_id']
-      del(artist['_id'])
-      del(artist['_metadata'])
+      del artist['_id']
+      del artist['_metadata']
       copy_keys = list(artist.keys())
       for key in copy_keys:
         if  artist[key] is None or not artist[key] or artist[key] == '' or len(artist[key]) == 0:
@@ -73,7 +74,7 @@ class Artist:
       # here we are probably only inserting link and name, so we get only the id from the insertion
       logging.debug('inserting new artist: %s' , artist['name'], extra={"artist":self.band})
       res = coll.insert_one(artist)
-      artist['id'] = res.inserted_id
+      artist['id'] = str(res.inserted_id)
     logging.debug('new artist for insertion: %s' , artist, extra={"artist":self.band})
     return artist
 
@@ -89,18 +90,20 @@ class Artist:
       logging.debug('found existing artist: %s' , artist['name'], extra={"artist":self.band})
       # we delete the _id as we don't want it as _id but _id
       artist['id'] = artist['_id']
-      del(artist['_id'])
-      del(artist['_metadata'])
       copy_keys = list(artist.keys())
       for key in copy_keys:
-        if  artist[key] is None or not artist[key] or artist[key] == '' or len(artist[key]) == 0:
+        logging.debug('current key: %s' , key, extra={"artist":self.band})
+        if key != 'discovered' and ( artist[key] is None or not artist[key] or artist[key] == '' or len(artist[key]) == 0):
           del artist[key] 
     else:
       # here we are probably only inserting link and name, so we get only the id from the insertion
       logging.debug('inserting new artist: %s' , artist['name'], extra={"artist":self.band})
       res = coll.insert_one(artist)
-      artist['id'] = res.inserted_id
+      artist['id'] = str(res.inserted_id)
     logging.debug('new artist for insertion: %s' , artist, extra={"artist":self.band})
+    for key in ['_id','_metadata']:
+      if key in artist:
+        del artist[key]
     return artist
 
 
@@ -134,7 +137,7 @@ class Artist:
         doc['label'][index] = self.getOrInsertLabel(doc['label'][index])
 
 
-    for rel in ["current_member_of", "past_member_of", "spinoffs", "spinoff_of", "associated_acts"]:
+    for rel in ["current_member_of", "past_member_of", "spinoffs", "spinoff_of", "associated_acts", "current_members", "past_members"]:
       if rel in doc:
         logging.debug('%s is there.' , rel, extra={"artist":self.band})
         for index, label in enumerate(doc[rel]):
