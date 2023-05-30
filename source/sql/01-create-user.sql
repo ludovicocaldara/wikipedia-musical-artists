@@ -1,5 +1,3 @@
-whenever sqlerror exit 1
-
 alter session set container=FREEPDB1;
 
 create user bands identified by Bands##123;
