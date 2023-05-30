@@ -1,4 +1,4 @@
-import Artists
+import Artist
 import pymongo
 import sys
 
@@ -6,9 +6,8 @@ import sys
 starting_band = sys.argv[1]
 
 
-band = Artists.MusicalArtist(starting_band)
-doc=band.getDict()
+band = Artist.Artist(starting_band)
 
-print(band.getJson())
+band.process()
 
-discovered = [starting_band]
+

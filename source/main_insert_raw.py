@@ -18,7 +18,7 @@ myclient = pymongo.MongoClient("mongodb://bands:Bands%23%23123@localhost:27017/b
 
 
 db = myclient["bands"]
-col = db["rawbands"]
+collection = db["rawbands"]
 
-x = col.insert_one(doc)
+res = collection.insert_one(doc)
 

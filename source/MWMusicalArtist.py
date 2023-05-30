@@ -6,7 +6,7 @@ import re
 import logging
 
 
-class MusicalArtist:
+class MWMusicalArtist:
   ####################################################
   def __init__(self, name):
     self.name = name
@@ -206,6 +206,9 @@ class MusicalArtist:
     # self.doc will contain the data of the JSON document
     self.doc = {}
 
+    # setting the first doc item :-)
+    self.doc['type'] = self.artist_type
+
     # _params contain the parameter which I translate 1:1 as a JSON property
     common_params = [ 'name', 'wikipedia_link', 'origin', 'website', ]
 
@@ -261,6 +264,9 @@ class MusicalArtist:
             self._special_param(param, False)
           else:
             self._special_param(param)
+
+    logging.info('Setting artist as discovered', extra={"artist":self.name})
+    self.doc['discovered'] = True
 
 
   def getJson(self):
