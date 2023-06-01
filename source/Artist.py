@@ -25,10 +25,14 @@ class Artist:
   # returns: id
   def getOrInsertGenre (self, genre):
     coll = self.mongo_db['genre']
-    res = coll.find_one(genre)
-    if res:
-      genre['id'] = res['_id']
+    # workaround bug 35444921: use find instead of find_one or we get ORA-40666
+    res = coll.find(genre)
+    res_list = list(res)
+    if len(res_list) == 1:
+        genre['id'] = res_list[0]['_id']
     else:
+      # if we have more than one document by querying my unique key, we have a problem
+      assert(len(res_list)==0)
       res = coll.insert_one(genre)
       genre['id'] = str(res.inserted_id)
     logging.debug('new genre for insertion: %s' , genre, extra={"artist":self.band})
@@ -40,10 +44,14 @@ class Artist:
   # returns: the new dict with the id included
   def getOrInsertLabel (self, label):
     coll = self.mongo_db['label']
-    res = coll.find_one(label)
-    if res:
-      label['id'] = res['_id']
+    # workaround bug 35444921: use find instead of find_one or we get ORA-40666
+    res = coll.find(label)
+    res_list = list(res)
+    if len(res_list) == 1:
+      label['id'] = res_list[0]['_id']
     else:
+      # if we have more than one document by querying my unique key, we have a problem
+      assert(len(res_list)==0)
       res = coll.insert_one(label)
       label['id'] = str(res.inserted_id)
     logging.debug('new label for insertion: %s' , label, extra={"artist":self.band})
@@ -56,56 +64,60 @@ class Artist:
     #for searching a previous artist, we require only the name, as it's unique
     search = dict({"name":artist["name"]})
     logging.debug('search condition: %s' , search, extra={"artist":self.band})
-    coll = self.mongo_db['band']
-    res = coll.find_one(search)
+    coll = self.mongo_db['band_short']
+    # workaround bug 35444921: use find instead of find_one or we get ORA-40666
+    res = coll.find(search)
+    res_list = list(res)
     # if it's already there, we rather set the artist with the full details of the result
-    if res:
-      artist = res
-      logging.debug('found existing artist: %s' , artist['name'], extra={"artist":self.band})
+    # anyway, the plan is not to update related artists
+    if len(res_list) == 1:
+      artist = res_list[0]
+      logging.debug('found existing related artist: %s' , artist['name'], extra={"artist":self.band})
       # we delete the _id as we don't want it as _id but _id
       artist['id'] = artist['_id']
       del artist['_id']
       del artist['_metadata']
       copy_keys = list(artist.keys())
       for key in copy_keys:
-        if  artist[key] is None or not artist[key] or artist[key] == '' or len(artist[key]) == 0:
-          del artist[key] 
-    else:
-      # here we are probably only inserting link and name, so we get only the id from the insertion
-      logging.debug('inserting new artist: %s' , artist['name'], extra={"artist":self.band})
-      res = coll.insert_one(artist)
-      artist['id'] = str(res.inserted_id)
-    logging.debug('new artist for insertion: %s' , artist, extra={"artist":self.band})
-    return artist
-
-
-  def insertOrUpdateArtist (self, artist):
-    #for searching a previous artist, we require only the name, as it's unique
-    search = dict({"name":artist["name"]})
-    coll = self.mongo_db['band']
-    res = coll.find_one(search)
-    # if it's already there, we rather set the artist with the full details of the result
-    if res:
-      artist = res
-      logging.debug('found existing artist: %s' , artist['name'], extra={"artist":self.band})
-      # we delete the _id as we don't want it as _id but _id
-      artist['id'] = artist['_id']
-      copy_keys = list(artist.keys())
-      for key in copy_keys:
-        logging.debug('current key: %s' , key, extra={"artist":self.band})
         if key != 'discovered' and ( artist[key] is None or not artist[key] or artist[key] == '' or len(artist[key]) == 0):
           del artist[key] 
     else:
+      # if we have more than one document by querying my unique key, we have a problem
+      assert(len(res_list)==0)
       # here we are probably only inserting link and name, so we get only the id from the insertion
       logging.debug('inserting new artist: %s' , artist['name'], extra={"artist":self.band})
       res = coll.insert_one(artist)
       artist['id'] = str(res.inserted_id)
-    logging.debug('new artist for insertion: %s' , artist, extra={"artist":self.band})
     for key in ['_id','_metadata']:
       if key in artist:
         del artist[key]
     return artist
 
+
+  def insertOrUpdateArtist (self, artist):
+    # for searching a previous artist, we require only the name, as it's unique
+    # we also don't need the relations to update (band_short), as it's the scope of this function to create them
+    search = dict({"name":artist["name"]})
+    coll = self.mongo_db['band_short']
+    # workaround bug 35444921: use find instead of find_one or we get ORA-40666
+    res = coll.find(search)
+    res_list = list(res)
+    # if it's already there, we rather set the artist with the full details of the result
+    if len(res_list) == 1:
+      existing_artist = res_list[0]
+      logging.debug('found existing artist: %s' , existing_artist, extra={"artist":self.band})
+      # we delete the _id as we don't want it as _id but _id
+      logging.debug('Need to update the band in mongo: %s' , artist, extra={"artist":self.band})
+      coll = self.mongo_db['band']
+      coll.update_one({"_id":existing_artist['_id']},{"$set":artist})
+
+    else:
+      # if we have more than one document by querying my unique key, we have a problem
+      assert(len(res_list)==0)
+      # here we are probably only inserting link and name, so we get only the id from the insertion
+      logging.debug('inserting new artist: %s' , artist['name'], extra={"artist":self.band})
+      res = coll.insert_one(artist)
+      artist['id'] = str(res.inserted_id)
 
 
 
@@ -144,8 +156,4 @@ class Artist:
           # if there is an artist relation, get its id, otherwise insert a new one and get its id
           doc[rel][index] = self.getOrInsertArtist(doc[rel][index])
 
-
-    print(json.dumps(doc, indent=4))
-
     self.insertOrUpdateArtist(doc)
-
