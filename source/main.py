@@ -1,13 +1,28 @@
 import Artist
-import pymongo
 import sys
+import time
 
 
-starting_band = sys.argv[1]
 
 
-band = Artist.Artist(starting_band)
+args = sys.argv
 
-band.process()
+del args[0]
 
+for arg in args:
+  band = Artist.Artist(arg)
+  band.process()
+
+
+limit = 1
+
+
+from MongoFactory import mongo_db
+coll = mongo_db['band_short']
+
+bands_to_discover = coll.find({'discovered':False}).limit(limit)
+
+for band in bands_to_discover:
+  print(band)
+  time.sleep(0.5)
 
