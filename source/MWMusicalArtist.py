@@ -5,6 +5,11 @@ import json
 import re
 import logging
 
+class NoMusicalInfoboxException(Exception):
+  pass
+
+class RedirectException(Exception):
+  pass
 
 class MWMusicalArtist:
   ####################################################
@@ -23,8 +28,12 @@ class MWMusicalArtist:
     # initialize the page using self.link
     page = wptools.page(self.link)
 
+
     page.get_parse('wikitext')
     wt = page.data['wikitext']
+
+    if self.link != page.data['title']:
+      raise RedirectException("The page ihas been redirected")
 
     infoboxes = self._find_infoboxes(wt)
     params = dict()
@@ -45,6 +54,8 @@ class MWMusicalArtist:
     if 'name' not in self.doc:
       self.doc['name'] = self.link
     self.doc['discovered'] = True
+    logging.debug('Discovered dict: %s', self.doc, extra={"artist":self.link})
+
 
 
 
@@ -76,7 +87,7 @@ class MWMusicalArtist:
 
     # if this is not an artist, let's raise an exception
     if not self.is_artist:
-      raise Exception("The page does not contain a musical artist infobox")
+      raise NoMusicalInfoboxException("The page does not contain a musical artist infobox")
 
     return infoboxes
 
@@ -206,7 +217,8 @@ class MWMusicalArtist:
             ret_list.append(self._lint_value(item.value.strip()))
           return ret_list
         else:
-          logging.debug('Unknown template for list: %s', template_name,  extra={"artist":self.link})
+          logging.debug('Unknown template for list: %s, treating as comma separated', template_name,  extra={"artist":self.link})
+          return self._split_string(value)
 
 
 

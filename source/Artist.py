@@ -1,7 +1,8 @@
 import MWMusicalArtist
 import sys
 import logging
-import json
+from MWMusicalArtist import NoMusicalInfoboxException
+from MWMusicalArtist import RedirectException
 
 
 class Artist:
@@ -24,8 +25,23 @@ class Artist:
 
 
   def getFromWikipedia(self, name):
-    print("ciccio")
-    return self._normalize_dict(MWMusicalArtist.MWMusicalArtist(name).getDict())
+    try:
+      ret = self._normalize_dict(MWMusicalArtist.MWMusicalArtist(name).getDict())
+    except LookupError:
+      ret = self._normalize_dict(self.getFromDatabase(name))
+      ret['error'] = 'LookupError'
+    except NoMusicalInfoboxException:
+      ret = self._normalize_dict(self.getFromDatabase(name))
+      ret['error'] = 'NoMusicalInfoboxException'
+    except RedirectException:
+      ret = self._normalize_dict(self.getFromDatabase(name))
+      ret['error'] = 'RedirectException'
+    finally:
+      if not ret.get('error'):
+        ret['error'] = ''
+      ret['discovered'] = True
+      logging.debug('normalized dict :%s' , ret, extra={"artist":self.band})
+      return ret
 
 
   def getFromDatabase(self, name, short=False):
@@ -40,7 +56,7 @@ class Artist:
     res = list(coll.find(search))
     # if it's already there, we rather set the artist with the full details of the result
     if len(res) == 1:
-      return res_list[0]
+      return res[0]
     # if we have more than one document by querying my unique key, we have a problem
     assert (len(res) == 0)
     return false
@@ -55,11 +71,11 @@ class Artist:
       if name in accepted_keys:
         # we want to merge current and past members
         if name in ['current_member_of','past_member_of']:
-          if 'member_of' not in dir(ret):
+          if not ret.get('member_of'):
             ret['member_of'] = list()
           ret['member_of'].extend(value)
         elif name in ['current_members','past_members']:
-          if 'members' not in dir(ret):
+          if not ret.get('members'):
             ret['members'] = list()
           ret['members'].extend(value)
         else:
@@ -67,17 +83,23 @@ class Artist:
     return ret
 
 
-
   ########################
   # this insert a dict into a coll name. no questions
   def _insert_dict(self,doc,coll_name):
     mongo_db = self._get_connection()
-    coll = mongo_db[coll_name]
+
+    ## temporary, remove after debug, remove after debug
+    coll_temp = coll_name.replace('_short','')
+    coll = mongo_db[coll_temp]
+    #coll = mongo_db[coll_name]
+
     logging.debug('inserting dict :%s - into collation %s' , doc, coll_name, extra={"artist":self.band})
     res = coll.insert_one(doc)
     logging.debug('inserted dict :%s - into collation %s' , doc, coll_name, extra={"artist":self.band})
     # insert_one modifies the dict with the _id included
-    return doc
+    ret = self._normalize_dict(self.getFromDatabase(doc['name']))
+    ret['error'] = ''
+    return ret
 
 
 
@@ -93,6 +115,9 @@ class Artist:
         for name, value in enumerate(doc[prop]):
           # if there is an artist relation, upsert it
           ret = self._upsert_dict(value,'artist_short')
+          if '_id' in ret:
+            ret['id'] = ret['_id']
+            del ret['_id']
           updated[prop].append(ret)
     logging.debug('new doc: %s', updated, extra={"artist":self.band})
     self._upsert_dict(updated,'artist')
@@ -116,6 +141,8 @@ class Artist:
       del copy['_metadata']
       logging.debug('copy before merge is :%s ' , copy , extra={"artist":self.band})
       copy.update(relation)
+      if '_id' in copy:
+        del copy['_id']
       logging.debug('copy after merge is :%s ' , copy , extra={"artist":self.band})
 
       logging.debug('need to update collextion %s document id %s with %s' , coll_name, res[0]['_id'], copy , extra={"artist":self.band})
@@ -130,11 +157,13 @@ class Artist:
       return self._insert_dict(relation, coll_name)
     
 
+  def _strip_none(self,doc):
+    return {key: value for key, value in doc.items() if value is not None}
 
 
   def _update_dict(self,doc_id, doc_set, coll_name):
     mongo_db = self._get_connection()
     coll = mongo_db[coll_name]
     logging.debug('updating doc id :%s - with %s - in collection %s' , doc_id, doc_set, coll_name, extra={"artist":self.band})
-    coll.update_one({'_id':doc_id},{'$set':doc_set})
+    coll.update_one({'_id':doc_id},{'$set':self._strip_none(doc_set)})
     logging.debug('updated doc id :%s - with %s - in collection %s' , doc_id, doc_set, coll_name, extra={"artist":self.band})
