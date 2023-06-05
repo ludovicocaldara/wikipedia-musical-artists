@@ -33,7 +33,7 @@ class MWMusicalArtist:
     wt = page.data['wikitext']
 
     if self.link != page.data['title']:
-      raise RedirectException("The page ihas been redirected")
+      raise RedirectException("The page has been redirected")
 
     infoboxes = self._find_infoboxes(wt)
     params = dict()
@@ -244,7 +244,8 @@ class MWMusicalArtist:
       separators = r'<br\/>|<br \/>|\n|, |,|\u2022'
 
       # Flatlists often use "^\* " as line heading, so better filter it out here with a lambda
-      return ( list(map(lambda item: item.lstrip("* "), re.split(separators, string))))
+      return list(filter(None, map(lambda item: item.lstrip("* "), re.split(separators, string))))
+
 
 
   ####################################################
