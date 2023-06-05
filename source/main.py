@@ -2,34 +2,50 @@ import Artist
 import sys
 import time
 import json
+import logging
+
+from Artist import NoMusicalInfoboxException
+
+FORMAT = '%(asctime)s - %(levelname)-8s - %(funcName)-15s - %(message)s'
+logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+
+
+
+def processBand(name):
+    logging.info('Processing band [%s]', name)
+    band = Artist.Artist(name)
+    try:
+      doc = band.getFromWikipedia(name)
+    except LookupError:
+      logging.warning('LookupError: the page [%s] does not exist on Wikipedia', name)
+    except NoMusicalInfoboxException:
+      logging.warning('NoMusicalInfoboxException: the page [%s] does not have a Musical Infobox', name)
+    else:  
+      band.upsertArtist(doc, 'artist')
 
 
 args = sys.argv
 
 del args[0]
 
-for arg in args:
-  band = Artist.Artist(arg)
-  doc = band.getFromWikipedia(arg)
+if len(args) > 0:
+  for arg in args:
+    processBand(arg)
+    
 
-  print(json.dumps(doc,indent=2))
-  band.upsertArtist(doc, 'artist')
+else:
+
+  limit = 50
+
+  from MongoFactory import mongo_db
+  coll = mongo_db['artist_short']
+
+  bands_to_discover = coll.find({'discovered':False}).limit(limit)
+
+  for new_band in bands_to_discover:
+    processBand(new_band['name']) 
+    time.sleep(0.5)
 
 
 
-limit = 10
-
-
-from MongoFactory import mongo_db
-coll = mongo_db['artist_short']
-
-bands_to_discover = coll.find({'discovered':False}).limit(limit)
-
-for new_band in bands_to_discover:
-  print(new_band['name'])
-
-  band = Artist.Artist(new_band['name'])
-  doc = band.getFromWikipedia(new_band['name'])
-
-  band.upsertArtist(doc, 'artist')
-  time.sleep(0.5)
+  

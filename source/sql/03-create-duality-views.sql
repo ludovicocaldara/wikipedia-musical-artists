@@ -5,6 +5,7 @@ create or replace json relational duality view artist as
     name    : name
     link    : link
     discovered : discovered
+    error   : error
     member_of : members @insert @update @delete @link(to: "MEMBER_ID") 
       [
         {
@@ -15,6 +16,7 @@ create or replace json relational duality view artist as
             name : name
             link : link
             discovered : discovered
+            error   : error
           }
 	}
       ]
@@ -28,6 +30,7 @@ create or replace json relational duality view artist as
             name : name
             link : link
             discovered : discovered
+            error   : error
           }
 	}
       ]
@@ -35,12 +38,13 @@ create or replace json relational duality view artist as
 
 
 create or replace json relational duality view artist_short as
-  artists @insert @update @delete
+  artists @insert @update @delete @nocheck
   {
     _id     : id
     name    : name
     link    : link
     discovered : discovered
+    error   : error
   };
 
 
