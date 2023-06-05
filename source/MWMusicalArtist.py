@@ -5,294 +5,234 @@ import json
 import re
 import logging
 
+class NoMusicalInfoboxException(Exception):
+  pass
+
+class RedirectException(Exception):
+  pass
 
 class MWMusicalArtist:
   ####################################################
   def __init__(self, name):
-    self.name = name
+    self.link = name
 
-    FORMAT = '%(asctime)s - %(levelname)-8s - '+ self.name +' - %(funcName)-15s - %(message)s'
+    FORMAT = '%(asctime)s - %(levelname)-8s - '+ self.link +' - %(funcName)-15s - %(message)s'
     logging.basicConfig(format=FORMAT, level=logging.DEBUG)
-
     self._discover()
-    self._person_or_band()
-    self._parse()
-
 
 
   ####################################################
   # get the content from the Wikipedia Page
   def _discover(self):
 
-    # initialize the page using self.name
-    page = wptools.page(self.name)
+    # initialize the page using self.link
+    page = wptools.page(self.link)
 
-    # we are interested in the wikitext only. We'll use mwparserfromhell for the actual parsing.
-    # WPTools offers a convenient way to get the Infobox, but it has several problems:
-    #  - it messes up with nested templates (some artists like Dave Grohl have a generic person template with nested templates)
-    #  - we cannot get the template name, which is fundamental to understand if we are crawling a good page
+
     page.get_parse('wikitext')
-
-    # get the raw wiki text (str) to use with mwparserfromhell
     wt = page.data['wikitext']
 
-    # we are interested in templates directly, no need for the actual text.
-    # tempaltes is a list containing the various templates, each with name and params
-    templates = mwparserfromhell.parse(wt).filter_templates()
+    if self.link != page.data['title']:
+      raise RedirectException("The page ihas been redirected")
+
+    infoboxes = self._find_infoboxes(wt)
+    params = dict()
+    for infobox in infoboxes:
+      params.update(self._parse_infobox(infobox))
+
+    self.doc = dict()
+    for key, value in params.items():
+      logging.debug('starting parsing parameter: {%s : %s}', key, value, extra={"artist":self.link})
+      parsed_param = self._parse_param({'name': key, 'value': value})
+      logging.debug('ended parsing parameter: %s', parsed_param, extra={"artist":self.link})
+      if parsed_param:
+        self.doc[key] = parsed_param
+
+    logging.info('Setting artist as discovered', extra={"artist":self.link})
+    self.doc['link'] = self.link
+    # yep... that happens (e.g. Kris Novoselic)
+    if 'name' not in self.doc:
+      self.doc['name'] = self.link
+    self.doc['discovered'] = True
+    logging.debug('Discovered dict: %s', self.doc, extra={"artist":self.link})
 
 
-    # We start with the assuption that the page is not an artist, then we'll validate it with the infobox information
+
+
+  ##################################################
+  # given a text in input, return the list of infoboxes
+  def _find_infoboxes(self, text):
+
+    # we aim to find an artist (and eventually a person infobox)
     self.is_artist = False
 
-    # is_person will be true for pages where the main infobox is person (like Dave Grohl)
-    # not to be confused with the background that can be person or group_or_band
-    self.is_person = False
-
     # initialize the infobox list
-    self.infoboxes = list()
+    infoboxes = list()
 
-    # Here get the infobox type. 
-    # We are interested in infoboxes "Infobox person" and "Inbofox musical artist".
-    # If "Infobox person", then we need to dig until we get "Infobox musical artist", and use both.
+    templates = mwparserfromhell.parse(text).filter_templates()
+
     for template in templates:
-
       template_name = self._lint_value(template.name.strip())
+      template_value = self._lint_value(template.strip())
 
       # scan the infoboxes
       if template_name.startswith("Infobox"):
+        logging.debug('Found infobox template: %s', template_name, extra={"artist":self.link})
+        infoboxes.append(template)
 
-        logging.debug('Looping infobox template: %s', template_name, extra={"artist":self.name})
-
-        if template_name == "Infobox musical artist":
-          logging.info('Found relevant template: %s', template_name, extra={"artist":self.name})
-          logging.info('Discovering an artist (is_artist=True)', extra={"artist":self.name})
+        if template_name in [ "Infobox musical artist", "Infobox musician"]:
+          logging.info('We are discovering an artist (is_artist=True)', extra={"artist":self.link})
           self.is_artist = True
-          self.infoboxes.append(template)
 
-          break
-
-        if template_name == "Infobox person":
-          logging.info('Found relevant template: %s', template_name, extra={"artist":self.name})
-
-          logging.debug('Appending the template to the list of relevant templates', extra={"artist":self.name})
-          self.infoboxes.append(template)
-  
-          logging.info('We are discovering a person (is_person=True)', extra={"artist":self.name})
-          self.is_person = True
-
-          logging.debug('Infobox musical artist not found yet. Digging one morel level.', extra={"artist":self.name})
-          # template alone string returns the actual wikitext. That's cool!
-          person_templates = mwparserfromhell.parse(template).filter_templates()
-
-          # Repeating the loop to finr person_templates.
-          # A recursion would be much nicer here, but I'll dig just one level, so "meh".
-          for person_template in person_templates:
-
-            person_template_name = self._lint_value(person_template.name.strip())
-            logging.debug('Looping infobox template: %s', person_template_name, extra={"artist":self.name})
-
-            if person_template_name == "Infobox musical artist":
-              logging.info('Found relevant template: %s', person_template_name, extra={"artist":self.name})
-
-              logging.info('Discovering an artist (is_artist=True)', extra={"artist":self.name})
-              self.is_artist = True
-              self.infoboxes.append(person_template)
-              break
-
-          break
-
-
-    # print the found infoboxes just for debug
-    #for infobox in self.infoboxes:
-    #  print ("======= INFOBOX ========")
-    #  print (infobox)
-    
-    # some variable cleanup, I must improve variable cleaning
-    del page, template, templates
-    if 'person_templates' in dir():
-      del person_templates
-    if 'person_template' in dir():
-      del person_template
 
     # if this is not an artist, let's raise an exception
     if not self.is_artist:
-      raise Exception("The page does not contain a musical artist infobox")
+      raise NoMusicalInfoboxException("The page does not contain a musical artist infobox")
 
+    return infoboxes
 
-    return
 
 
   ####################################################
-  # According to Wikipedia's rules, Infobox musical artist requires a parameter "background" containing either "person" or "group_or_band"
-  # However, for not having a relational model with constraints, there's a price to pay. It's a mess!
-  # Some artists don't have "background". Some do, but the value is invalid.
-  # So another way to tell them apart is to look for known properties specific to persons or bands.
-  # That's why I put this in a different function.
-  def _person_or_band(self):
-    # here we don't know if person or band, unless detected with the infobox name during discover()
-    if not self.is_person:
+  # given an infobox in input, return a dict() with the discovered parameters
+  def _parse_infobox(self, infobox):
 
-      logging.debug('Do not know if person or band yet, digging the Infoboxes to discover more', extra={"artist":self.name})
-      artist_type_found = False
+    params = {}
 
-      for infobox in self.infoboxes:
-        logging.debug('Looping infobox %s', infobox.name.strip(), extra={"artist":self.name})
-        if self._lint_value(infobox.name.strip()) == 'Infobox musical artist':
+    infobox_name = self._lint_value(infobox.name.strip())
+    logging.debug('Parsing all parameters in infobox: %s', infobox_name, extra={"artist":self.link})
 
-          # According to Wikipedia, Infobox musical artist requires a parameter "background" containing either "person" or "group_or_band"
-          # However, not all pages contain this. So the second rationale we are looking for is if the Infobox contains either one of {"current_member_of" , "past_member_of", "current_members", "past_members"}
-          # If none of the above is there, it's not critical to skip this page, as we are looking for connections, not artist general information.
-          try:
-            artist_type = infobox.get('background').value.strip().lower()
-            logging.debug('Got %s while getting the artist infobox background', artist_type, extra={"artist":self.name})
-            if artist_type in ["person","group_or_band"]:
-              logging.info('Artist type found in the background property! It\'s %s', artist_type, extra={"artist":self.name})
-              self.artist_type = artist_type
-              artist_type_found = True
-              del artist_type
-              break
-          except:
-            logging.debug('Could not get the artist infobox background.', extra={"artist":self.name})
+    # here I loop all the params from the infobox
+    for param in infobox.params:
+      param_name = self._lint_value(param.name.strip())
+      param_value = self._lint_value(param.value.strip())
 
-          # looking for any band params here
-          band_params = [ 'current_members', 'past_members', 'spinoffs', 'spinoff_of' ]
-          for param_to_find in band_params:
-            try:
-              foo = infobox.get(param_to_find)
-              logging.info('Found parameter %s in the artist infobox background. Assuming group_or_band', param_to_find, extra={"artist":self.name})
-              self.artist_type = "group_or_band"
-              artist_type_found = True
-              del foo, param_to_find
-              break
-            except:
-              logging.debug('Could not get the parameter %s in the artist infobox', param_to_find, extra={"artist":self.name})
+      if not self._need_to_skip(param_name):
+        params[param_name] = param_value
 
-          if artist_type_found:
-            break
+    return params
 
-          # looking for any person params here
-          person_params = [ 'current_member_of', 'past_member_of', 'occupation', 'instrument' ]
-          for param_to_find in person_params:
-            try:
-              foo = infobox.get(param_to_find)
-              logging.info('Found parameter %s in the artist infobox background. Assuming person', param_to_find, extra={"artist":self.name})
-              self.artist_type = "person"
-              artist_type_found = True
-              del foo, param_to_find
-              break
-            except:
-              logging.debug('Could not get the parameter %s in the artist infobox', param_to_find, extra={"artist":self.name})
 
-          if artist_type_found:
-            break
+
+  ######################################
+  # given a parameter in input, it returns if the parameter must be splitted (True or False)
+  def _need_to_skip(self, param_name):
+    if param_name in ['embed', 'module']:
+      return True
+    else:
+      return False
+
+
+  ######################################
+  # given a parameter in input, it returns if the parameter must be splitted (True or False)
+  def _need_to_split(self, param):
+    if param['name'] in ['label', 'alias', 'genre', 'associated_acts', 'occupation', 'instrument', 'instruments', 'current_member_of', 'past_member_of', 'spinoffs', 'current_members', 'past_members',]:
+      return True
+    else:
+      return False
+
+
+
+  ######################################
+  # given a parameter in input (dict of name and value), returns the correct values
+  def _parse_param(self, param):
+
+    if param['value'] == '':
+        return False
+
+    if self._need_to_split(param):
+      ret = list()
+      splitted_list = list(self._split_list(param))
+      logging.debug('Splitted list result: (len:%d) %s', len(splitted_list), splitted_list, extra={"artist":self.link})
+      for item in splitted_list:
+        ret.append(self._parse_item_for_link(item))
+      return ret
 
     else:
-      self.artist_type = "person"
-      artist_type_found = True
-
-    # If we haven't found anything here, we cannot really continue
-    if not artist_type_found:
-      raise Exception('Cannot determine if group or person')
+      if param['value'] is not None and param['value'] and param['value']!= '':
+        return param['value']
+      else:
+        return False
 
 
-  ####################################################
-  def _parse(self):
 
-    logging.debug('Starting parsing the infoboxes content into a dict for JSON creation', extra={"artist":self.name})
+  #####################################
+  # given a text , it find the first link occurrence and get its text, then return a dict
+  # to be used only with items coming from a list, or there might be many links!
+  # if there is a link, it returns {"link":link, "name":text}
+  #          otherwise, it returns {"name":text}
+  def _parse_item_for_link(self, text):
 
-    # the artist type should be known here, or we should have raised an exception before entering this function
-    assert self.artist_type in [ 'person', 'group_or_band' ]
+        logging.debug('Looking for MW links in: %s', text, extra={"artist":self.link})
+        links = mwparserfromhell.parse(text).filter_wikilinks()
+        if len(links) == 0:
+          logging.debug('no links in %s', text, extra={"artist":self.link})
+          return {'name':text.strip()}
+        else:
+          logging.debug('link found in: %s', links[0], extra={"artist":self.link})
+          if not links[0].text:
+            links[0].text = links[0].title
+          # assume just one link, or we are doomed :-/
+          return {'link':links[0].title.strip(), 'name':links[0].text.strip()}
 
-    # self.doc will contain the data of the JSON document
-    self.doc = {}
-
-    # setting the first doc item :-)
-    self.doc['type'] = self.artist_type
-
-    # _params contain the parameter which I translate 1:1 as a JSON property
-    common_params = [ 'name', 'wikipedia_link', 'origin', 'website', ]
-
-    # _specials contain special parameter which I might translate to list(dict()) or something different
-    common_specials = [
-      'image',  'image_upright', 'image_size', 'landscape', 'alt', 'caption',  # -> into image json
-      'years_active', 'alias', 'genre', 'label', 'associated_acts', # -> list
-      ]
-
-    person_params = [ 'honorific_prefix', 'honorific_suffix', 'native_name', 'native_name_lang', 'birth_name', 'birth_date', 'birth_place', 'death_date', 'death_place', ]
-
-    person_specials = [ 'occupation', 'instrument', 'current_member_of', 'past_member_of', ]
-
-    band_params = [] # they are all specials
-
-    band_specials = [ 'spinoffs', 'spinoff_of', 'current_members', 'past_members', ]
-
-    not_details = ['name','wikipedia_link', 'type', 'genre', 'label', 'associated_acts', 'current_member_of', 'past_member_of', 'spinoffs', 'spinoff_of', 'current_members', 'past_members']
-
-    # if we are here without exception, we know if person or band
-    # depending on it, I load the list of relevant parameters
-    if self.artist_type == 'person':
-      relevant_params = common_params + person_params
-      relevant_specials = common_specials + person_specials
-    elif self.artist_type == 'group_or_band':
-      relevant_params = common_params + band_params
-      relevant_specials = common_specials + band_specials
-
-    # here I loop all the parameters and I add them to the doc
-    for infobox in self.infoboxes:
-
-      infobox_name = self._lint_value(infobox.name.strip())
-      logging.debug('Parsing all parameters in infobox: %s', infobox_name, extra={"artist":self.name})
-
-      for param in infobox.params:
-
-        param_name = self._lint_value(param.name.strip())
-        logging.debug('Parsing the parameter: %s', param_name, extra={"artist":self.name})
-
-        if param_name in relevant_params:
-          logging.info('Found relevant regular parameter: %s', param_name, extra={"artist":self.name})
-          if param_name in not_details:
-            self.doc[param_name] = self._lint_value(param.value.strip())
-          else:
-            if not 'details' in self.doc:
-              self.doc['details'] = dict()
-            self.doc['details'][param_name] = self._lint_value(param.value.strip())
-
-        if param_name in relevant_specials:
-          logging.info('Found relevant special parameter: %s', param_name, extra={"artist":self.name})
-          # I treat any special parameters in a dedicated function
-          if param_name in not_details:
-            self._special_param(param, False)
-          else:
-            self._special_param(param)
-
-    logging.info('Setting artist as discovered', extra={"artist":self.name})
-    self.doc['discovered'] = True
-
-
-  def getJson(self):
-    return json.dumps(self.doc, indent=4)
-
-  def getDict(self):
-    return self.doc
 
 
   ####################################################
-  # remote spaces, <ref> tags, and HTML comments
+  # take a musical artist infobox parameter to split as a list and put it in a new list.
+  # returns a new list to be used by the calling function.
+  # it's more than a string split, as it has to take into account several listing possibilities of wikipedia.
+  # Again, the template doc says it should be hlist, flatlist, or comma separated, but there are too many exceptions
+  # like <br/>, or templates like unbullet lists, etc. So I try to cover as much as possible in this function.
+  def _split_list (self, param):
+    ret_list = list()
+
+    value = param['value']
+    param_name = param['name']
+
+    # we get the templates from within the property value: we can have HList, FlatList, others, or no templates (comma-separated)
+    logging.debug('Looking for templates to split in: %s' , value,  extra={"artist":self.link})
+    templates = mwparserfromhell.parse(value).filter_templates()
+
+    if len(templates) == 0:
+      logging.debug('No templates detected. Splitting %s using comma-ish separations', param_name,  extra={"artist":self.link})
+      return self._split_string(value)
+
+    else:
+      for template in templates:
+        template_name = self._lint_value(template.name.strip())
+        logging.debug('Found template: %s', template_name,  extra={"artist":self.link})
+
+        if template_name.lower() in ['flatlist', 'plainlist']:
+          for item in template.params:
+            logging.debug('Splitting %s flatlist item: %s', param_name, item.value.strip(),  extra={"artist":self.link})
+            ret_list = self._split_string(item.value.strip())
+          return ret_list
+
+
+        elif template_name.lower() in [ 'hlist', 'ubl','unbullet list', 'unbulleted list']:
+
+          for item in template.params:
+            logging.debug('Splitted %s %s item: %s', param_name, template_name, item.value.strip(),  extra={"artist":self.link})
+
+            ret_list.append(self._lint_value(item.value.strip()))
+          return ret_list
+        else:
+          logging.debug('Unknown template for list: %s, treating as comma separated', template_name,  extra={"artist":self.link})
+          return self._split_string(value)
+
+
+
+  ####################################################
+  # remove spaces, <ref> tags, and HTML comments
   def _lint_value(self, value):
-
     # remove ref tags
     value = re.sub(r'<ref\b[^>]*\/?>.*?<\/ref>', '', value, flags=re.DOTALL)
-
     # remove self-closing ref tags
     value = re.sub(r"<ref\s+[^>]*\s*/>", "", value)
-
     ## remove self-closing tags
     #value = re.sub(r'<[^>]+\/>', '', value)
-
     # remove HTML comments
     value = re.sub("(<!--.*?-->)", "", value, flags=re.DOTALL)
-
-
     # return stripped
     return value.strip()
 
@@ -307,119 +247,13 @@ class MWMusicalArtist:
       return ( list(map(lambda item: item.lstrip("* "), re.split(separators, string))))
 
 
-
   ####################################################
-  # take a musical artist infobox parameter to split as a list and put it in a new list.
-  # returns a new list to be used by the calling function.
-  # it's more than a string split, as it has to take into account several listing possibilities of wikipedia.
-  # Again, the template doc says it should be hlist, flatlist, or comma separated, but there are too many exceptions
-  # like <br/>, or templates like unbullet lists, etc. So I try to cover as much as possible in this function.
-  def _split_list (self, param):
-    ret_list = list()
-
-    value = param.value.strip()
-    value = self._lint_value(value)
-    param_name = self._lint_value(param.name.strip())
-
-    # we get the templates from within the property value: we can have HList, FlatList, others, or no templates (comma-separated)
-    logging.debug('Looking for templates to split in: %s' , value,  extra={"artist":self.name})
-    templates = mwparserfromhell.parse(value).filter_templates()
-
-    if len(templates) == 0:
-      logging.debug('No templates detected. Splitting %s using comma-ish separations', param_name,  extra={"artist":self.name})
-      return self._split_string(value)
-
-    else:
-      for template in templates:
-        template_name = self._lint_value(template.name.strip())
-        logging.debug('Found template: %s', template_name,  extra={"artist":self.name})
-
-        if template_name.lower() in ['flatlist', 'plainlist']:
-          for item in template.params:
-            logging.debug('Splitting %s flatlist item: %s', param_name, item.value.strip(),  extra={"artist":self.name})
-            ret_list = self._split_string(item.value.strip())
-          return ret_list
-
-
-        elif template_name.lower() in [ 'hlist', 'ubl','unbullet list', 'unbulleted list']:
-
-          for item in template.params:
-            logging.debug('Splitted %s %s item: %s', param_name, template_name, item.value.strip(),  extra={"artist":self.name})
-
-            ret_list.append(self._lint_value(item.value.strip()))
-          return ret_list
-        else:
-          logging.debug('Unknown template for list: %s', template_name,  extra={"artist":self.name})
+  # return a JSON string of the dict ready to print
+  def getJson(self):
+    return json.dumps(self.doc, indent=4)
 
 
   ####################################################
-  # Function to split name and link.
-  # e.g.
-  #        "[[Dan Gilroy (musician)|Dan Gilroy]]",  => {'name':'Dan Gilroy','link':'Dan Gilroy (musician)'}
-  #        "[[Stephen Bray]]", => {'name':'Stephen Bray','link':'Stephen Bray'}
-  #        "Paul Kauk", => {'name':'Paul Kauk','link':''}
-  #
-  # the idea is to keep the mw page for more robust discovery: collect the name and the link, discover using the link, try the name if the link is not there.
-  # so if an artist is not discoverable, the link can be searched and updated manually
-  def _split_name_link(self, mwlink):
-    pass
-
-  ####################################################
-  # these params require special treatment
-  def _special_param(self, param, is_detail = True):
-
-    if is_detail and not 'details' in self.doc:
-      self.doc['details'] = dict()
-
-    # image-related parameters. Image is always a detail
-    param_name = self._lint_value(param.name.strip())
-    if param_name in ['image', 'image_upright', 'image_size', 'landscape', 'alt', 'caption' ] :
-      value = self._lint_value(param.value.strip())
-      if value != '':
-        logging.debug('Adding image property to the image dict: %s', param_name, extra={"artist":self.name})
-        if not 'image' in self.doc['details']:
-          self.doc['details']['image'] = dict()
-        self.doc['details']['image'][param_name] = value
-
-    # every other parameter. We want to put everything in details except what's relevant for our analysis
-    elif param_name in [ 'label', 'alias', 'genre', 'associated_acts', 'occupation', 'instrument', 'current_member_of', 'past_member_of', 'spinoffs', 'current_members', 'past_members',]:
-      splitted_list = list(self._split_list(param))
-      logging.debug('Splitted list result: (len:%d) %s', len(splitted_list), splitted_list, extra={"artist":self.name})
-      # we might have an empty string as the only value... this happens if the parameter in the infobox was set without value
-      if len(splitted_list) == 1 and splitted_list[0] == '':
-        logging.debug('Empty value ... skipping', extra={"artist":self.name})
-        return
-
-      if is_detail:
-        if not param_name in self.doc['details']:
-          self.doc['details'][param_name] = list()
-      else:
-        if not param_name in self.doc:
-          self.doc[param_name] = list()
-
-      for item in splitted_list:
-        logging.debug('Looking for MW links in: %s', item, extra={"artist":self.name})
-        links = mwparserfromhell.parse(item).filter_wikilinks()
-        if len(links) == 0:
-          logging.debug('no links in %s', item, extra={"artist":self.name})
-          if is_detail:
-            self.doc['details'][param_name].append({'link':'', 'name':item})
-          else:
-            self.doc[param_name].append({'link':'', 'name':item})
-        else:
-          logging.debug('link found in: %s', links[0], extra={"artist":self.name})
-          if not links[0].text:
-            links[0].text = links[0].title
-          # assume just one link, or we are doomed :-/
-          if is_detail:
-            self.doc['details'][param_name].append({'link':links[0].title.strip(), 'name':links[0].text.strip()})
-          else:
-            self.doc[param_name].append({'link':links[0].title.strip(), 'name':links[0].text.strip()})
-
-
-
-
-#    elif
-#      'years_active', # -> list
-
-      'spinoff_of',
+  # return the dict of the band
+  def getDict(self):
+    return self.doc
