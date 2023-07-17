@@ -11,6 +11,17 @@ class NoMusicalInfoboxException(Exception):
 class RedirectException(Exception):
   pass
 
+
+#############################################
+# The MWMusicalArtist class gets the content of a given MediaWiki Page
+# Parses the content to find Infoboxes, and tries to find content relative to Musical Artists
+# The resulting self.doc contains the dictionary that can easily be transformed to JSON.
+#
+# e.g. 
+# ret = MWMusicalArtist.MWMusicalArtist('Kyuss').getDict()
+#
+
+
 class MWMusicalArtist:
   ####################################################
   def __init__(self, name):

@@ -1,6 +1,4 @@
-alter session set container=FREEPDB1;
-
-create user bands identified by Bands##123;
+create user bands identified by Bands##123 default tablespace users;
 
 grant connect, resource , soda_app to bands;
 
@@ -19,6 +17,3 @@ BEGIN
 END;
 /
 
-connect bands/Bands##123@localhost:1521/FREEPDB1
-exec ords.enable_schema;
-commit;
