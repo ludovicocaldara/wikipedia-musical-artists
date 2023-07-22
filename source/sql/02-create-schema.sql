@@ -1,5 +1,3 @@
-connect bands/Bands##123@localhost:1521/FREEPDB1
-
 exec ords.enable_schema;
 commit;
 
@@ -12,6 +10,7 @@ begin
 end;
 /
 
+
 drop table if exists spinoffs;
 drop table if exists associated_acts;
 drop table if exists members;
@@ -21,10 +20,17 @@ drop table if exists artist_genres;
 drop table if exists genres;
 drop table if exists artists;
 
+drop domain if exists artist_type;
+
+create domain artist_type as varchar2(15) 
+  constraint artist_type_chk check (artist_type in ('person','group_or_band'))
+  order      artist_type;
+
 create table artists (
   id               varchar2(30) not null ,
   name             varchar2(255) not null unique,
   link             varchar2(255),
+  type             domain artist_type not null,
   discovered       boolean default false,
   error            varchar2(30),
   constraint artists_pk primary key(id)

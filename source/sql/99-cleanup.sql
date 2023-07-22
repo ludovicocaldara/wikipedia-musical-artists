@@ -22,4 +22,6 @@ drop table if exists artist_genres;
 drop table if exists genres;
 drop table if exists artists;
 
+drop domain if exists artist_type;
+
 
