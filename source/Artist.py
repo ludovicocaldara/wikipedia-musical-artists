@@ -154,6 +154,7 @@ class Artist:
     else:
       # if we have more than one document by querying my unique key, we have a problem
       assert(len(res)==0)
+      assert(relation['name'] != '')
       return self._insert_dict(relation, coll_name)
     
 

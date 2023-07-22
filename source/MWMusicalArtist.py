@@ -11,6 +11,17 @@ class NoMusicalInfoboxException(Exception):
 class RedirectException(Exception):
   pass
 
+
+#############################################
+# The MWMusicalArtist class gets the content of a given MediaWiki Page
+# Parses the content to find Infoboxes, and tries to find content relative to Musical Artists
+# The resulting self.doc contains the dictionary that can easily be transformed to JSON.
+#
+# e.g. 
+# ret = MWMusicalArtist.MWMusicalArtist('Kyuss').getDict()
+#
+
+
 class MWMusicalArtist:
   ####################################################
   def __init__(self, name):
@@ -33,7 +44,7 @@ class MWMusicalArtist:
     wt = page.data['wikitext']
 
     if self.link != page.data['title']:
-      raise RedirectException("The page ihas been redirected")
+      raise RedirectException("The page has been redirected")
 
     infoboxes = self._find_infoboxes(wt)
     params = dict()
@@ -244,7 +255,8 @@ class MWMusicalArtist:
       separators = r'<br\/>|<br \/>|\n|, |,|\u2022'
 
       # Flatlists often use "^\* " as line heading, so better filter it out here with a lambda
-      return ( list(map(lambda item: item.lstrip("* "), re.split(separators, string))))
+      return list(filter(None, map(lambda item: item.lstrip("* "), re.split(separators, string))))
+
 
 
   ####################################################
