@@ -88,7 +88,7 @@ class Artist:
   def _insert_dict(self,doc,coll_name):
     mongo_db = self._get_connection()
 
-    ## temporary, remove after debug, remove after debug
+    ## temporary, remove after debug
     coll_temp = coll_name.replace('_short','')
     coll = mongo_db[coll_temp]
     #coll = mongo_db[coll_name]
