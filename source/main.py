@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import Artist
 import sys
 import time
@@ -41,12 +42,12 @@ else:
     from MongoFactory import mongo_db
     coll = mongo_db['artist_short']
 
-    bands_to_discover = coll.find({'discovered':False}).limit(limit)
+    bands_to_discover = coll.find({'discovered':False, 'error':None }).limit(limit)
     newbands = False
     for new_band in bands_to_discover:
       newbands = True
       processBand(new_band['name']) 
-      time.sleep(0.5)
+      time.sleep(0.2)
 
     if not newbands:
       break
