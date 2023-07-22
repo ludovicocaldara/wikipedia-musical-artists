@@ -26,7 +26,9 @@ class Artist:
 
   def getFromWikipedia(self, name):
     try:
-      ret = self._normalize_dict(MWMusicalArtist.MWMusicalArtist(name).getDict())
+      ret = MWMusicalArtist.MWMusicalArtist(name).getDict()
+      ret['type'] = self._band_or_person(ret)
+      ret = self._normalize_dict(ret)
     except LookupError:
       ret = self._normalize_dict(self.getFromDatabase(name))
       ret['error'] = 'LookupError'
@@ -39,9 +41,31 @@ class Artist:
     finally:
       if not ret.get('error'):
         ret['error'] = ''
-      ret['discovered'] = True
-      logging.debug('normalized dict :%s' , ret, extra={"artist":self.band})
-      return ret
+
+    ret['discovered'] = True
+    logging.debug('normalized dict :%s' , ret, extra={"artist":self.band})
+    return ret
+
+
+  # issue#4 given the dict in input, tis funcion returns 'person' , 'group_or_band', or nothing at all.
+  # It might happens that a band has no Infobox because it was referenced before hand.
+  # In that case, the type must be known already
+  def _band_or_person(self, doc):
+    # if the background is there and is valid, that's easy
+    if 'background' in doc:
+      if doc['background'].lower() == 'person':
+        return 'person'
+      if doc['background'].lower() == 'group_or_band':
+        return 'group_or_band'
+    # if the backgroupnd is not valid, we have to figure it out
+    # any of the following parameters hints that it's a band or a musician
+    band_params = [ 'current_members', 'past_members', 'spinoffs', 'spinoff_of' ]
+    person_params = [ 'current_member_of', 'past_member_of', 'occupation', 'instrument' ]
+    for param in doc:
+      if param in band_params:
+        return 'group_or_band'
+      if param in person_params:
+        return 'person'
 
 
   def getFromDatabase(self, name, short=False):
@@ -114,6 +138,11 @@ class Artist:
         updated[prop] = list()
         for name, value in enumerate(doc[prop]):
           # if there is an artist relation, upsert it
+          # issue#4: I prepopulate the type, as when it's referenced I know already what it is
+          if prop == "members":
+            value['type']='person'
+          if prop == "member_of":
+            value['type']='group_or_band'
           ret = self._upsert_dict(value,'artist_short')
           if '_id' in ret:
             ret['id'] = ret['_id']

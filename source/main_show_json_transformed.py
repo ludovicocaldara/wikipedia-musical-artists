@@ -22,7 +22,7 @@ def processBand(name):
     except NoMusicalInfoboxException:
       logging.warning('NoMusicalInfoboxException: the page [%s] does not have a Musical Infobox', name)
     else:  
-      band.upsertArtist(doc, 'artist')
+      print(json.dumps(doc, indent=4))
 
 
 args = sys.argv
@@ -33,22 +33,4 @@ if len(args) > 0:
   for arg in args:
     processBand(arg)
     
-
-else:
-
-  while True:
-    limit = 50
-
-    from MongoFactory import mongo_db
-    coll = mongo_db['artist_short']
-
-    bands_to_discover = coll.find({'discovered':False, 'error':None }).limit(limit)
-    newbands = False
-    for new_band in bands_to_discover:
-      newbands = True
-      processBand(new_band['name']) 
-      time.sleep(0.2)
-
-    if not newbands:
-      break
 

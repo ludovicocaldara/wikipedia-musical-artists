@@ -4,6 +4,7 @@ create or replace json relational duality view artist as
     _id     : id
     name    : name
     link    : link
+    type    : type
     discovered : discovered
     error   : error
     member_of : members @insert @update @delete @link(to: "MEMBER_ID") 
@@ -15,6 +16,7 @@ create or replace json relational duality view artist as
             id : id
             name : name
             link : link
+            type : type
             discovered : discovered
             error   : error
           }
@@ -29,6 +31,7 @@ create or replace json relational duality view artist as
             id : id
             name : name
             link : link
+            type : type
             discovered : discovered
             error   : error
           }
@@ -43,6 +46,7 @@ create or replace json relational duality view artist_short as
     _id     : id
     name    : name
     link    : link
+    type    : type
     discovered : discovered
     error   : error
   };
@@ -55,4 +59,3 @@ begin
     col := dbms_soda.create_dualv_collection('artist_short', 'ARTIST_SHORT');
 end;
 /
-

@@ -95,6 +95,9 @@ class MWMusicalArtist:
           logging.info('We are discovering an artist (is_artist=True)', extra={"artist":self.link})
           self.is_artist = True
 
+        # issue#5: If we find a Musical Artist Infobox, cut now and avoid problems with multiple artist infoboxes
+        break
+
 
     # if this is not an artist, let's raise an exception
     if not self.is_artist:
