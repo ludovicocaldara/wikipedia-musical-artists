@@ -35,17 +35,19 @@ if len(args) > 0:
 
 else:
 
-  limit = 50
+  while True:
+    limit = 50
 
-  from MongoFactory import mongo_db
-  coll = mongo_db['artist_short']
+    from MongoFactory import mongo_db
+    coll = mongo_db['artist_short']
 
-  bands_to_discover = coll.find({'discovered':False}).limit(limit)
+    bands_to_discover = coll.find({'discovered':False}).limit(limit)
+    newbands = False
+    for new_band in bands_to_discover:
+      newbands = True
+      processBand(new_band['name']) 
+      time.sleep(0.5)
 
-  for new_band in bands_to_discover:
-    processBand(new_band['name']) 
-    time.sleep(0.5)
+    if not newbands:
+      break
 
-
-
-  
