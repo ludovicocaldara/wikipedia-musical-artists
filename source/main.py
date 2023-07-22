@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import Artist
 import sys
 import time
