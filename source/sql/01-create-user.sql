@@ -1,6 +1,6 @@
 create user bands identified by Bands##123 default tablespace users;
 
-grant connect, resource , soda_app to bands;
+grant connect, resource , soda_app, create domain to bands;
 
 alter user bands quota unlimited on users;
 
