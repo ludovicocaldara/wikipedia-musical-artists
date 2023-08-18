@@ -37,6 +37,36 @@ create or replace json relational duality view artist as
           }
         }
       ]
+    spinoff_of : spinoffs @insert @update @delete @link(to: "SPINOFF_ID")
+      [
+        {
+          spinoff_of_id : id
+          artists @noinsert @update @nodelete @unnest @link(from: "BAND_ID")
+          {
+            id : id
+            name : name
+            link : link
+            type : type
+            discovered : discovered
+            error   : error
+          }
+        }
+      ]
+    spinoffs : spinoffs @insert @update @delete @link(to: "BAND_ID")
+      [
+        {
+          spinoffs_id : id
+          artists @noinsert @update @nodelete @unnest @link(from: "SPINOFF_ID")
+          {
+            id : id
+            name : name
+            link : link
+            type : type
+            discovered : discovered
+            error   : error
+          }
+        }
+      ]
   };
 
 

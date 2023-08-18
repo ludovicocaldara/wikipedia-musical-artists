@@ -89,7 +89,7 @@ class Artist:
   def _normalize_dict(self, doc):
     # in the very first simple try we consider only members. No labels, genres, spinoffs and no associated acts.
     #accepted_keys = ['name','type','link','discovered','genre','label','current_member_of','past_member_of','past_members','current_members','spinoff_of','spinoffs','associated_acts']
-    accepted_keys = ['name','type','link','discovered','current_member_of','past_member_of','past_members','current_members']
+    accepted_keys = ['name','type','link','discovered','current_member_of','past_member_of','past_members','current_members','spinoffs','spinoff_of']
     ret = dict()
     for name, value in doc.items():
       if name in accepted_keys:
@@ -102,6 +102,10 @@ class Artist:
           if not ret.get('members'):
             ret['members'] = list()
           ret['members'].extend(value)
+        elif name in ['spinoffs','spinoff_of']:
+          # don't add the array if empty
+          if len(value) != 0:
+            ret[name] = value
         else:
           ret[name] = value
     return ret
@@ -132,7 +136,7 @@ class Artist:
     coll = mongo_db[coll_name]
 
     updated = doc.copy()
-    for prop in ["member_of", "members"]:
+    for prop in ["member_of", "members", "spinoff_of" , "spinoffs"]:
       if prop in doc:
         logging.debug('%s is there.' , prop, extra={"artist":self.band})
         updated[prop] = list()
@@ -143,6 +147,19 @@ class Artist:
             value['type']='person'
           if prop == "member_of":
             value['type']='group_or_band'
+          if prop in ["spinoff_of" , "spinoffs"]:
+            value['type']='group_or_band'
+
+          # strip relation ids before the upsert as the short view doesn't have them
+          if 'spinoff_of_id' in value:
+            del value['spinoff_of_id']
+          if 'spinoffs_id' in value:
+            del value['spinoffs_id']
+          if 'members_id' in value:
+            del value['members_id']
+          if 'belonging_band_id' in value:
+            del value['belonging_band_id']
+
           ret = self._upsert_dict(value,'artist_short')
           if '_id' in ret:
             ret['id'] = ret['_id']
@@ -172,6 +189,8 @@ class Artist:
       copy.update(relation)
       if '_id' in copy:
         del copy['_id']
+      if 'id' in copy:
+        del copy['id']
       logging.debug('copy after merge is :%s ' , copy , extra={"artist":self.band})
 
       logging.debug('need to update collextion %s document id %s with %s' , coll_name, res[0]['_id'], copy , extra={"artist":self.band})

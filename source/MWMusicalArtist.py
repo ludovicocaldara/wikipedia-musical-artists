@@ -140,7 +140,7 @@ class MWMusicalArtist:
   ######################################
   # given a parameter in input, it returns if the parameter must be splitted (True or False)
   def _need_to_split(self, param):
-    if param['name'] in ['label', 'alias', 'genre', 'associated_acts', 'occupation', 'instrument', 'instruments', 'current_member_of', 'past_member_of', 'spinoffs', 'current_members', 'past_members',]:
+    if param['name'] in ['label', 'alias', 'genre', 'associated_acts', 'occupation', 'instrument', 'instruments', 'current_member_of', 'past_member_of', 'spinoffs', 'spinoff_of', 'current_members', 'past_members',]:
       return True
     else:
       return False
@@ -227,8 +227,8 @@ class MWMusicalArtist:
 
           for item in template.params:
             logging.debug('Splitted %s %s item: %s', param_name, template_name, item.value.strip(),  extra={"artist":self.link})
-
-            ret_list.append(self._lint_value(item.value.strip()))
+            if item.value.strip():
+              ret_list.append(self._lint_value(item.value.strip()))
           return ret_list
         else:
           logging.debug('Unknown template for list: %s, treating as comma separated', template_name,  extra={"artist":self.link})
