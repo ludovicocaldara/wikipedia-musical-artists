@@ -85,7 +85,7 @@ class Artist:
       return res[0]
     # if we have more than one document by querying my unique key, we have a problem
     assert (len(res) == 0)
-    return false
+    return False
 
 
   def _normalize_dict(self, doc):
