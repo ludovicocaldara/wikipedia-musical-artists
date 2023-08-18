@@ -227,6 +227,7 @@ class MWMusicalArtist:
 
           for item in template.params:
             logging.debug('Splitted %s %s item: %s', param_name, template_name, item.value.strip(),  extra={"artist":self.link})
+
             if item.value.strip():
               ret_list.append(self._lint_value(item.value.strip()))
           return ret_list

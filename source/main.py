@@ -15,14 +15,8 @@ logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 def processBand(name):
     logging.info('Processing band [%s]', name)
     band = Artist.Artist(name)
-    try:
-      doc = band.getFromWikipedia(name)
-    except LookupError:
-      logging.warning('LookupError: the page [%s] does not exist on Wikipedia', name)
-    except NoMusicalInfoboxException:
-      logging.warning('NoMusicalInfoboxException: the page [%s] does not have a Musical Infobox', name)
-    else:  
-      band.upsertArtist(doc, 'artist')
+    doc = band.getFromWikipedia(name)
+    band.upsertArtist(doc, 'artist')
 
 
 args = sys.argv
