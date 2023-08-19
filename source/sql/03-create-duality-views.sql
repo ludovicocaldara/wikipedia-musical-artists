@@ -67,6 +67,28 @@ create or replace json relational duality view artist as
           }
         }
       ]
+    genre   : artist_genres @insert @update @delete
+      [
+        {
+          artist_genres_id : id
+          genres @noinsert @update @nodelete @unnest
+          {
+            id : id
+            name : name
+          }
+        }
+      ]
+    label   : artist_labels @insert @update @delete
+      [
+        {
+          artist_labels_id : id
+          labels @noinsert @update @nodelete @unnest
+          {
+            id : id
+            name : name
+          }
+        }
+      ]
   };
 
 
