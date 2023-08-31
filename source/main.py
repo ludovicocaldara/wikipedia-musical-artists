@@ -30,8 +30,8 @@ if len(args) > 0:
 
 else:
 
-  limit = 1000
-  iterations=1
+  limit = 100
+  iterations=50
   while iterations>0:
 
     from MongoFactory import mongo_db
@@ -47,5 +47,5 @@ else:
     if not newbands:
       break
 
-    iterations--
+    iterations -= 1
 

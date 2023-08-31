@@ -70,12 +70,12 @@ class Artist:
         return 'person'
 
 
-  def getFromDatabase(self, name, short=False):
+  def getFromDatabase(self, name, coll_name='artist', short=False):
     mongo_db = self._get_connection()
     if short:
       coll = mongo_db['artist_short']
     else:
-      coll = mongo_db['artist']
+      coll = mongo_db[coll_name]
 
     search = {"name":name}
     # workaround bug 35444921: use find instead of find_one or we get ORA-40666 in some circumstances
@@ -91,7 +91,7 @@ class Artist:
   def _normalize_dict(self, doc):
     # in the very first simple try we consider only members. No labels, genres, spinoffs and no associated acts.
     #accepted_keys = ['name','type','link','discovered','genre','label','current_member_of','past_member_of','past_members','current_members','spinoff_of','spinoffs','associated_acts']
-    accepted_keys = ['name','type','link','discovered','current_member_of','past_member_of','past_members','current_members', 'spinoffs', 'spinoff_of']
+    accepted_keys = ['id','name','type','link','discovered','genre','label', 'current_member_of','past_member_of','past_members','current_members', 'spinoffs', 'spinoff_of']
     ret = dict()
     for name, value in doc.items():
       if name in accepted_keys:
@@ -104,7 +104,7 @@ class Artist:
           if not ret.get('members'):
             ret['members'] = list()
           ret['members'].extend(value)
-        elif name in ['spinoffs','spinoff_of']:
+        elif name in ['spinoffs','spinoff_of','genre','label']:
           #don't add the array if empty
           if len(value) != 0:
             ret[name] = value
@@ -127,8 +127,13 @@ class Artist:
     res = coll.insert_one(doc)
     logging.debug('inserted dict :%s - into collation %s' , doc, coll_name, extra={"artist":self.band})
     # insert_one modifies the dict with the _id included
-    ret = self._normalize_dict(self.getFromDatabase(doc['name']))
-    ret['error'] = ''
+    ret = self.getFromDatabase(doc['name'], coll_temp)
+
+    logging.debug('got from database before normalization:%s' , ret, extra={"artist":self.band})
+    ret = self._normalize_dict(ret)
+    logging.debug('got from database after normalization:%s' , ret, extra={"artist":self.band})
+    #ret['error'] = ''
+    logging.debug('returning :%s' , ret, extra={"artist":self.band})
     return ret
 
 
@@ -157,6 +162,22 @@ class Artist:
           if prop in ["spinoff_of" , "spinoffs"]:
             value['type']='group_or_band'
           ret = self._upsert_dict(value,'artist_short')
+          if not ret.get('error'):
+            ret['error'] = ''
+          if '_id' in ret:
+            ret['id'] = ret['_id']
+            del ret['_id']
+          updated[prop].append(ret)
+
+    for prop in ["genre", "label"]:
+      if prop in doc:
+        logging.debug('%s is there.' , prop, extra={"artist":self.band})
+        updated[prop] = list()
+        for name, value in enumerate(doc[prop]):
+          # insert in genres or labels
+          if 'link' in value:
+            del value['link']
+          ret = self._upsert_dict(value, prop )
           if '_id' in ret:
             ret['id'] = ret['_id']
             del ret['_id']
