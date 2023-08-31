@@ -103,6 +103,19 @@ create or replace json relational duality view artist_short as
     error   : error
   };
 
+create or replace json relational duality view genre as
+  genres @insert @update @delete @nocheck
+  {
+    _id     : id
+    name    : name
+  };
+
+create or replace json relational duality view label as
+  labels @insert @update @delete @nocheck
+  {
+    _id     : id
+    name    : name
+  };
 
 declare
 col soda_collection_t;

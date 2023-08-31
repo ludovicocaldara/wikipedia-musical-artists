@@ -223,7 +223,7 @@ class MWMusicalArtist:
           return ret_list
 
 
-        elif template_name.lower() in [ 'hlist', 'ubl','unbullet list', 'unbulleted list']:
+        elif template_name.lower() in [ 'hlist', 'ubl','unbullet list', 'unbulleted list', 'collapsible list']:
 
           for item in template.params:
             logging.debug('Splitted %s %s item: %s', param_name, template_name, item.value.strip(),  extra={"artist":self.link})
