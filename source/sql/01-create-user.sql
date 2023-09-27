@@ -1,4 +1,4 @@
-create user bands identified by Bands##123 default tablespace users;
+create user bands identified by BandsBands##123 default tablespace users;
 
 grant connect, resource , soda_app, create domain to bands;
 
