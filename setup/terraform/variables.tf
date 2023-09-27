@@ -36,6 +36,12 @@ variable "db_system_shape" {
   default = "VM.Standard2.2"
 }
 
+variable "vm_shape" {
+  description = "OCI Compute VM shape. Flex is the new default and it's pretty nice :-). Beware of your quotas, credits and limits if you plan to change it."
+  default = "VM.Standard2.2"
+}
+
+
 variable "vm_user" {
   description = "SSH user to connect to the server for the setup. Must have sudo privilege."
   default = "opc"
@@ -84,13 +90,19 @@ variable "db_disk_redundancy" {
 
 variable "db_version" {
   description = "Version for the DB system. This lab supports 23c only."
-  default = "23.0.0.0"
+  default = "23.3.0"
 }
 
 variable "data_storage_size_in_gb" {
   description = "ASM space in GB. 256 is a good default to host also the Server storage."
   default = "256"
 }
+
+variable "boot_volume_size_in_gbs" {
+  description = "Boot volume size for the compute instance"
+  default = "100"
+}
+
 
 variable "license_model" {
   default = "BRING_YOUR_OWN_LICENSE"
