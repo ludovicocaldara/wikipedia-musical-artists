@@ -7,11 +7,11 @@ create or replace json relational duality view artist as
     type    : type
     discovered : discovered
     error   : error
-    member_of : members @insert @update @delete @link(to: "MEMBER_ID") 
+    member_of : members @insert @update @delete @link(to: ["MEMBER_ID"]) 
       [
         {
           belonging_band_id : id
-          artists @noinsert @update @nodelete @unnest @link(from: "BAND_ID") 
+          artists @noinsert @update @nodelete @unnest @link(from: ["BAND_ID"]) 
           {
             id : id
             name : name
@@ -22,11 +22,11 @@ create or replace json relational duality view artist as
           }
         }
       ]
-    members : members @insert @update @delete @link(to: "BAND_ID") 
+    members : members @insert @update @delete @link(to: ["BAND_ID"]) 
       [
         {
           members_id : id
-          artists @noinsert @update @nodelete @unnest @link(from: "MEMBER_ID") 
+          artists @noinsert @update @nodelete @unnest @link(from: ["MEMBER_ID"]) 
           {
             id : id
             name : name
@@ -37,11 +37,11 @@ create or replace json relational duality view artist as
           }
         }
       ]
-    spinoff_of : spinoffs @insert @update @delete @link(to: "SPINOFF_ID")
+    spinoff_of : spinoffs @insert @update @delete @link(to: ["SPINOFF_ID"])
       [
         {
           spinoff_of_id : id
-          artists @noinsert @update @nodelete @unnest @link(from: "BAND_ID")
+          artists @noinsert @update @nodelete @unnest @link(from: ["BAND_ID"])
           {
             id : id
             name : name
@@ -52,11 +52,11 @@ create or replace json relational duality view artist as
           }
         }
       ]
-    spinoffs : spinoffs @insert @update @delete @link(to: "BAND_ID")
+    spinoffs : spinoffs @insert @update @delete @link(to: ["BAND_ID"])
       [
         {
           spinoffs_id : id
-          artists @noinsert @update @nodelete @unnest @link(from: "SPINOFF_ID")
+          artists @noinsert @update @nodelete @unnest @link(from: ["SPINOFF_ID"])
           {
             id : id
             name : name
