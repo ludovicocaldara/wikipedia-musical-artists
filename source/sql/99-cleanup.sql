@@ -5,6 +5,8 @@ drop function if exists f_get_object_id;
 declare
 num number;
 begin
+  num:= dbms_soda.drop_collection ('genre');
+  num:= dbms_soda.drop_collection ('label');
   num:= dbms_soda.drop_collection ('artist');
   num:= dbms_soda.drop_collection ('artist_short');
 end;
@@ -13,6 +15,8 @@ end;
 
 drop view if exists artist;
 drop view if exists artist_short;
+drop view if exists genre;
+drop view if exists label;
 drop table if exists spinoffs;
 drop table if exists associated_acts;
 drop table if exists members;

@@ -122,5 +122,7 @@ col soda_collection_t;
 begin
     col := dbms_soda.create_dualv_collection('artist', 'ARTIST');
     col := dbms_soda.create_dualv_collection('artist_short', 'ARTIST_SHORT');
+    col := dbms_soda.create_dualv_collection('genre', 'GENRE');
+    col := dbms_soda.create_dualv_collection('label', 'LABEL');
 end;
 /
