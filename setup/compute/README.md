@@ -47,6 +47,7 @@ wptools
 mwparserfromhell
 cx_Oracle
 xmltodict
+pymongo
 EOF
 
 pip install -r requirements.txt
