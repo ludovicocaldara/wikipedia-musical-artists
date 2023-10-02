@@ -1,0 +1,57 @@
+opg4j> String pgql = "SELECT a.name, a.pagerank FROM MATCH (a) ON BANDS ORDER BY a.pagerank DESC LIMIT 10"
+pgql ==> "SELECT a.name, a.pagerank FROM MATCH (a) ON BANDS ORDER BY a.pagerank DESC LIMIT 10"
+opg4j> session.queryPgql(pgql).print()
+...>
++---------------------------------------------+
+| name                 | pagerank             |
++---------------------------------------------+
+| Jeff Scott Soto      | 8.837277050562372E-4 |
+| Ray Luzier           | 7.232007679534053E-4 |
+| Joey Castillo        | 6.266029538457759E-4 |
+| Andy Hurley          | 6.153097509625679E-4 |
+| Mike Mangini         | 6.144150030912406E-4 |
+| Marc Rizzo           | 5.882008022117478E-4 |
+| Atom Willard         | 5.555996192893401E-4 |
+| Cedric Bixler-Zavala | 5.063436354342922E-4 |
+| John Corabi          | 5.036132261703329E-4 |
+| Zach Hill            | 5.030514135645797E-4 |
++---------------------------------------------+
+
+
+var model = session.createAnalyst().deepWalkModelBuilder().
+                 setMinWordFrequency(1).
+                 setBatchSize(512).
+                 setNumEpochs(1).
+                 setLayerSize(100).
+                 setLearningRate(0.05).
+                 setMinLearningRate(0.0001).
+                 setWindowSize(3).
+                 setWalksPerVertex(6).
+                 setWalkLength(4).
+                 setNegativeSample(2).
+                 setValidationFraction(0.01).
+                 build()
+model.fit(graph)
+model.getLoss()
+var similars = model.computeSimilars("64df648880a2c24c90badbc9",10)
+similars.print()
+
+
+var vertexVectors = model.getTrainedVertexVectors().flattenAll()
+vertexVectors.write().db().name("deepwalkframe").tablename("vertexVectors").overwrite(true).store()
+
+
+
+SELECT LISTAGG(src.name, ',')
+FROM MATCH TOP 2 SHORTEST ( (n) ((src)-[e]->)* (m) )
+WHERE n.name = 'Kyuss'
+
+
+SELECT *
+FROM MATCH (n) -[e:spinoffs]-> (m) on bands
+WHERE n.name = 'Kyuss'
+
+SELECT *
+FROM MATCH (kyuss) -[e:spinoffs]-> (spinoffs) -[f:members]-> (members) <-[g:members]- (bands) on bands
+WHERE kyuss.name = 'Kyuss'
+
