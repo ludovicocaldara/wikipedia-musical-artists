@@ -28,7 +28,7 @@ class MWMusicalArtist:
     self.link = name
 
     FORMAT = '%(asctime)s - %(levelname)-8s - '+ self.link +' - %(funcName)-15s - %(message)s'
-    logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+    logging.basicConfig(format=FORMAT, level=logging.ERROR)
     self._discover()
 
 
@@ -37,7 +37,7 @@ class MWMusicalArtist:
   def _discover(self):
 
     # initialize the page using self.link
-    page = wptools.page(self.link)
+    page = wptools.page(self.link, silent=True)
 
 
     page.get_parse('wikitext')
@@ -223,7 +223,7 @@ class MWMusicalArtist:
           return ret_list
 
 
-        elif template_name.lower() in [ 'hlist', 'ubl','unbullet list', 'unbulleted list']:
+        elif template_name.lower() in [ 'hlist', 'ubl','unbullet list', 'unbulleted list', 'collapsible list']:
 
           for item in template.params:
             logging.debug('Splitted %s %s item: %s', param_name, template_name, item.value.strip(),  extra={"artist":self.link})

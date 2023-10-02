@@ -30,8 +30,9 @@ if len(args) > 0:
 
 else:
 
-  while True:
-    limit = 50
+  limit = 100
+  iterations=50
+  while iterations>0:
 
     from MongoFactory import mongo_db
     coll = mongo_db['artist_short']
@@ -45,4 +46,6 @@ else:
 
     if not newbands:
       break
+
+    iterations -= 1
 
