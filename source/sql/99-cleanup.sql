@@ -29,3 +29,4 @@ drop table if exists artists;
 drop domain if exists artist_type;
 
 
+purge recyclebin;

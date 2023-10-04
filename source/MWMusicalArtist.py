@@ -59,7 +59,7 @@ class MWMusicalArtist:
       if parsed_param:
         self.doc[key] = parsed_param
 
-    logging.info('Setting artist as discovered', extra={"artist":self.link})
+    logging.debug('Setting artist as discovered', extra={"artist":self.link})
     self.doc['link'] = self.link
     # yep... that happens (e.g. Kris Novoselic)
     if 'name' not in self.doc:
@@ -92,7 +92,7 @@ class MWMusicalArtist:
         infoboxes.append(template)
 
         if template_name in [ "Infobox musical artist", "Infobox musician"]:
-          logging.info('We are discovering an artist (is_artist=True)', extra={"artist":self.link})
+          logging.debug('We are discovering an artist (is_artist=True)', extra={"artist":self.link})
           self.is_artist = True
 
           # issue#5: If we find a Musical Artist Infobox, cut now and avoid problems with multiple artist infoboxes
