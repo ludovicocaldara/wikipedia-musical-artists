@@ -8,7 +8,7 @@ import logging
 from Artist import NoMusicalInfoboxException
 
 FORMAT = '%(asctime)s - %(levelname)-8s - %(funcName)-15s - %(message)s'
-logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+logging.basicConfig(format=FORMAT, level=logging.INFO)
 
 
 
