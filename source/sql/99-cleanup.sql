@@ -28,4 +28,7 @@ drop table if exists artists;
 
 drop domain if exists artist_type;
 
+drop property graph band_graph;
 
+
+purge recyclebin;

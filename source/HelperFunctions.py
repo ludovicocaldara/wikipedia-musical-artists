@@ -47,20 +47,18 @@ def execute_plsql(connection, code):
 def render_graph(net:Network, connection:Connection) -> None:
     
     with connection.cursor() as cursor:
-        cursor.execute('''select c.id,
-                           c.first_name,
-                           c.last_name 
-                           from new_customers c''')
+        cursor.execute('''select a.id,
+                           a.name
+                           from artists a''')
         rows = cursor.fetchall()
         for row in rows:
-            net.add_node(int(row[0]), label=f'{row[1]} {row[2]}\n{row[0]}')
-        cursor.execute('''select source_id,
-                            target_id,
-                            relationship 
-                           from customer_relationships''')
+            net.add_node(row[0], label=f'{row[1]}\n{row[0]}')
+        cursor.execute('''select band_id,
+                            member_id
+                           from members''')
         rows = cursor.fetchall()
         for row in rows:
-            net.add_edge(int(row[0]), int(row[1]), label=row[2])
+            net.add_edge(row[0], row[1])
         net.repulsion(node_distance=100, spring_length=200)
         
     
