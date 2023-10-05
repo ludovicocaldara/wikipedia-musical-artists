@@ -61,7 +61,7 @@ unzip -d ords ords-latest.zip && cd ords/bin
 
 DBA_USERNAME=sys
 HOST=bands0.dbbands
-SERVICE=pbands_rw.dbbands.misclabs.oraclevcn.com
+SERVICE=pbands_rw
 echo WelcomeWelcome##123 > password.txt
 echo WelcomeWelcome##123 >> password.txt
 

@@ -88,10 +88,16 @@ class Artist:
     return False
 
 
-  def _normalize_dict(self, doc):
-    # in the very first simple try we consider only members. No labels, genres, spinoffs and no associated acts.
-    #accepted_keys = ['name','type','link','discovered','genre','label','current_member_of','past_member_of','past_members','current_members','spinoff_of','spinoffs','associated_acts']
-    accepted_keys = ['id','name','type','link','discovered','genre','label', 'current_member_of','past_member_of','past_members','current_members', 'spinoffs', 'spinoff_of']
+  def _normalize_dict(self, doc, coll_name='artist'):
+    # the exercise of filtering the accepted columns was relevant until 23.2. in 23.3 the flex column allows for unknown values that are unnested directly into the document.
+    # as we are auto-referencing artists, the flex column changes the ETAG of the table (to check with the devs), so I'll keep the col as non-flex
+    if coll_name == 'artist':
+      accepted_keys = ['id','name','type','link','discovered','genre','label', 'current_member_of','past_member_of','past_members','current_members', 'spinoffs', 'spinoff_of']
+      rejected_keys = ['_id','_metadata','members','member_of', 'error']
+    else:
+      # this is just a bad design hack. I should have splitted artists, genres, and labels into different classes
+      accepted_keys = ['id','name']
+
     ret = dict()
     for name, value in doc.items():
       if name in accepted_keys:
@@ -110,6 +116,13 @@ class Artist:
             ret[name] = value
         else:
           ret[name] = value
+      else:
+        # add the column even if unknown, as the flex column allows for it
+        if coll_name == 'artist':
+          if name not in rejected_keys:
+            if not ret.get('extras'):
+                ret['extras'] = dict()
+            ret['extras'][name] = value
     return ret
 
 
@@ -130,7 +143,7 @@ class Artist:
     ret = self.getFromDatabase(doc['name'], coll_temp)
 
     logging.debug('got from database before normalization:%s' , ret, extra={"artist":self.band})
-    ret = self._normalize_dict(ret)
+    ret = self._normalize_dict(ret, coll_temp)
     logging.debug('got from database after normalization:%s' , ret, extra={"artist":self.band})
     #ret['error'] = ''
     logging.debug('returning :%s' , ret, extra={"artist":self.band})
