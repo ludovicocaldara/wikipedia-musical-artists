@@ -13,6 +13,7 @@ end;
 /
 
 
+drop view if exists recommendations;
 drop view if exists artist;
 drop view if exists artist_short;
 drop view if exists genre;
