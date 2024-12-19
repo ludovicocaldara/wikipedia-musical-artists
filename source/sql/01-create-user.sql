@@ -4,7 +4,8 @@ grant connect, resource , soda_app, create domain, create mle  to bands;
 grant execute on javascript to bands;
 
 alter user bands quota unlimited on users;
-
+grant graph_developer to bands;
+ALTER USER BANDS GRANT CONNECT THROUGH GRAPH$PROXY_USER
 
 BEGIN
  ords_admin.enable_schema(
