@@ -8,7 +8,7 @@ from mw_musical_artist import NoMusicalInfoboxException
 from mw_musical_artist import RedirectException
 
 
-class artist:
+class Artist:
     """
     The Artist class gets a band name and returns a dictionary
     with a lot of information about the band
@@ -158,7 +158,7 @@ class artist:
 
         logging.debug('inserting dict :%s - into collation %s',
                       doc, coll_name, extra={"artist":self.band})
-        res = coll.insert_one(doc)
+        coll.insert_one(doc)
         logging.debug('inserted dict :%s - into collation %s',
                       doc, coll_name, extra={"artist":self.band})
         # insert_one modifies the dict with the _id included
@@ -175,10 +175,8 @@ class artist:
 
 
 
-    def upsert_artist(self,doc,coll_name):
+    def upsert_artist(self,doc):
         """ This function upserts an artist in the database"""
-        mongo_db = self._get_connection()
-        coll = mongo_db[coll_name]
 
         # we try to update the sub members only if there were no errors
         # otherwise we only have to update discovered and error
@@ -190,7 +188,7 @@ class artist:
             if prop in doc:
                 logging.debug('%s is there.' , prop, extra={"artist":self.band})
                 updated[prop] = list()
-                for name, value in enumerate(doc[prop]):
+                for _, value in enumerate(doc[prop]):
                     # if there is an artist relation, upsert it
                     # issue#4: I prepopulate the type, as when it's referenced
                     # I know already what it is
@@ -212,7 +210,7 @@ class artist:
             if prop in doc:
                 logging.debug('%s is there.' , prop, extra={"artist":self.band})
                 updated[prop] = list()
-                for name, value in enumerate(doc[prop]):
+                for _, value in enumerate(doc[prop]):
                     # insert in genres or labels
                     if 'link' in value:
                         del value['link']
