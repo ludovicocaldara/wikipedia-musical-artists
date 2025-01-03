@@ -8,7 +8,7 @@ ret = mw_musical_artist.mw_musical_artist('Kyuss').get_dict()"""
 import json
 import re
 import logging
-import wptools
+import requests
 import mwparserfromhell
 
 class NoMusicalInfoboxException(Exception):
@@ -25,9 +25,12 @@ class MWMusicalArtist:
      The resulting self.doc contains the dictionary that can easily be transformed to JSON.
     
      e.g.
-     ret = mw_musical_artist.mw_musical_artist('Kyuss').get_dict() """
+     ret = mw_musical_artist.MWMusicalArtist('Kyuss').get_dict() """
+
     def __init__(self, name):
+        """ The initialization does nothing but calling the _discover function"""
         self.link = name
+        self.title = name # let's assume this until we get it
         self.is_artist = False
 
         log_format = ('%(asctime)s - %(levelname)-8s - ' +
@@ -36,25 +39,62 @@ class MWMusicalArtist:
         self._discover()
 
 
-    ####################################################
-    # get the content from the Wikipedia Page
+    def _get_wikitext(self):
+        """
+        Get the content from the Wikipedia Page pointed by self.link.
+        We use requests and the MediaWiki API instead of wptools:
+        the elapsed time goes down from 800ms to 300ms.
+
+        Sets the title of the page in self.title.
+
+        Returns: the wikitext for the page as a string.
+        """
+        url = "https://en.wikipedia.org/w/api.php"
+
+        params = {
+            "action": "query",
+            "titles": self.link,
+            "format": "json",
+            "prop": "revisions",
+            "rvprop": "content"
+        }
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        pages = data["query"]["pages"]
+        self.title = next(iter(pages.values()))["title"]
+        return next(iter(pages.values()))["revisions"][0]["*"]
+
+
+
     def _discover(self):
+        """ Get the content from the Wikipedia Page pointed by self.link"""
 
-        # initialize the page using self.link
-        page = wptools.page(self.link, silent=True)
+        # get the wikitext from the page using self.link
+        wt = self._get_wikitext()
 
-
-        page.get_parse('wikitext')
-        wt = page.data['wikitext']
-
-        if self.link != page.data['title']:
+        # Redirections are a big issue with Wikipedia. The name of the page can
+        # be different from the link, which exposes all possible issues
+        # when inserting the data into the database (duplicates, etc.)
+        # So we rather raise an exception here.
+        if self.link != self.title:
             raise RedirectException("The page has been redirected")
 
+        # We get the infoboxes from the page (see _find_infoboxes() for details)
+        # infoboxes is an array of infobox templates already parsed
+        # for actual musical artist.
         infoboxes = self._find_infoboxes(wt)
+
+
+        # Now we parse the infoboxes and put each parameter in a single dictionary
+        # which will be our glorious JSON one day.
         params = dict()
         for infobox in infoboxes:
             params.update(self._parse_infobox(infobox))
 
+        # We try to further parse the parameters to normalize them
+        # ( remove garbage, convert wikipedia lists to arrays, etc.)
+        # If parsing is successful, we add it to the final dict()
+        # (self.doc).
         self.doc = dict()
         for key, value in params.items():
             logging.debug('starting parsing parameter: {%s : %s}',
@@ -65,41 +105,63 @@ class MWMusicalArtist:
             if parsed_param:
                 self.doc[key] = parsed_param
 
+        # As the original link isn't part of the data, we add it here
         logging.debug('Setting artist as discovered', extra={"artist":self.link})
         self.doc['link'] = self.link
+
+        # Compensating bad data here: there might be an Infobox without
+        # the name of the artist. In that case, we just use the link.
         # yep... that happens (e.g. Kris Novoselic)
         if 'name' not in self.doc:
             self.doc['name'] = self.link
+
+        # In the end, we mark the page as discovered.
+        # the reason is that once we insert the document into the database,
+        # we don't want to re-discover it
         self.doc['discovered'] = True
         logging.debug('Discovered dict: %s', self.doc, extra={"artist":self.link})
 
 
-
-
-    ##################################################
-    # given a text in input, return the list of infoboxes
     def _find_infoboxes(self, text):
+        """ 
+        The function takes mediawiki text in input,
+        and tries to find Infoboxes of an artist (and eventually a person infobox).
+        Musical Artists are supposed to contain an infobox of type 
+        "Musical Artist". The problem is that data on Wikipedia is s**t
+        and it might not be the case. In that case, we just let it go.
 
-        # we aim to find an artist (and eventually a person infobox)
+        Why not WPTools? WPTools parse the main infobox, but that's not recrsive.
+        Sadly, Infoboxes can contain other Infoboxes via the "module" parameter.
+        This is the case with many popular artists (e.g. Dave Grohl).
+        So we need to recursively search for Infoboxes and, if Musical Artist,
+        also take into account the child or parent infoboxes.
+
+        Returns: an array of infoboxes 
+        """
 
         # initialize the infobox list
         infoboxes = list()
 
+        # parse the mediawiki text to find ALL infoboxes
         templates = mwparserfromhell.parse(text).filter_templates()
 
         for template in templates:
             template_name = self._lint_value(template.name.strip())
-            template_value = self._lint_value(template.strip())
 
-            # scan the infoboxes
+            # Start looking for the good infobox
             if template_name.startswith("Infobox"):
                 logging.debug('Found infobox template: %s',
                                template_name, extra={"artist":self.link})
                 infoboxes.append(template)
 
+                # Some pages incorrectly use "musician" instead of "musical artist"
                 if template_name in [ "Infobox musical artist", "Infobox musician"]:
                     logging.debug('We are discovering an artist (is_artist=True)',
                                   extra={"artist":self.link})
+
+                    # we mark it as an artist here, so we know it's an actual artist
+                    # and in another loop we can take into account also
+                    # other relevant infoboxes, such as "Person"
                     self.is_artist = True
 
                     # issue#5: If we find a Musical Artist Infobox,
@@ -115,9 +177,13 @@ class MWMusicalArtist:
 
 
 
-    ####################################################
-    # given an infobox in input, return a dict() with the discovered parameters
     def _parse_infobox(self, infobox):
+        """
+        Given an infobox in input, loops the properties and 
+        lints them through the _lint_value() method.
+
+        Returns: a dict() with the discovered properties.
+        """
 
         params = {}
 
@@ -138,8 +204,14 @@ class MWMusicalArtist:
 
 
     def _need_to_skip(self, param_name):
-        """ given a parameter in input, it returns if the parameter
-          must be skipped (True or False)"""
+        """
+          Given a parameter in input, it returns if the parameter
+          must be skipped (True or False).
+          Some parameters are only functional to Wikipedia metadata
+          and don't provide anything to the artist's data.
+
+          Returns: True or False
+        """
         if param_name in ['embed', 'module']:
             return True
         else:
@@ -147,8 +219,14 @@ class MWMusicalArtist:
 
 
     def _need_to_split(self, param):
-        """ given a parameter in input, it returns if the parameter
-          must be splitted (True or False)"""
+        """ 
+        Given a parameter in input, it returns if the parameter
+        must be splitted (True or False).
+        These are typically parameters that contain lists.
+
+        Returns: True or False
+        """
+
         if param['name'] in ['label', 'alias', 'genre', 'associated_acts', 'occupation',
                              'instrument', 'instruments', 'current_member_of',
                              'past_member_of', 'spinoffs', 'spinoff_of',
@@ -159,9 +237,15 @@ class MWMusicalArtist:
 
 
 
-    ######################################
-    # given a parameter in input (dict of name and value), returns the correct values
     def _parse_param(self, param):
+        """
+        Given a parameter in input (dict of name and value), returns the correct values.
+
+        Returns:
+            * a string if the value is not empty and not a list
+            * an array of strings if the value is a list to be splitted
+            * False if the value is empty
+        """
 
         if param['value'] == '':
             return False
@@ -183,13 +267,17 @@ class MWMusicalArtist:
 
 
 
-    #####################################
-    # given a text , it find the first link occurrence and get its text, then return a dict
-    # to be used only with items coming from a list, or there might be many links!
-    # if there is a link, it returns {"link":link, "name":text}
-    #                    otherwise, it returns {"name":text}
     def _parse_item_for_link(self, text):
+        """ Given a text,
+        it finds the first link occurrence and gets its text,
+        then return a dict with link (eventually) and name.
+        This function is to be used only with items coming from a list,
+        or there might be many links!
 
+        Returns:
+            * if there is a link, {"link":link, "name":text}
+            * otherwise, it returns {"name":text}
+        """
         logging.debug('Looking for MW links in: %s', text, extra={"artist":self.link})
         links = mwparserfromhell.parse(text).filter_wikilinks()
         if len(links) == 0:
@@ -203,13 +291,22 @@ class MWMusicalArtist:
             return {'link':links[0].title.strip(), 'name':links[0].text.strip()}
 
     def _split_list (self, param):
-        """take a musical artist infobox parameter to split as a list and put it in a new list.
-        returns a new list to be used by the calling function.
-        it's more than a string split, as it has to take into account several
+        """
+        Take a musical artist infobox parameter to split as a list and put it in a new list.
+        It's more than a string split, as it has to take into account several
         listing possibilities of wikipedia.
-        Again, the template doc says it should be hlist, flatlist, or comma separated,
-        but there are too many exceptions like <br/>, or templates like unbullet lists, etc.
-        So I try to cover as much as possible in this function."""
+        The musical artist infobox template doc says it should be one of:
+            * hlist
+            * flatlist
+            * comma separated
+        But there are too many exceptions like:
+            * string separated by <br/>
+            * mediawiki templates like unbullet lists
+            * etc.
+        Here I try to cover as many cases as possible.
+
+        Returns: a new list to be used by the calling function.
+        """
         ret_list = list()
 
         value = param['value']
