@@ -2,279 +2,200 @@
 The artist class gets a band name and returns a dictionary
 with a lot of information about the band
 The dictionary is then stored in the database"""
-import logging
-import mw_musical_artist
-from mw_musical_artist import NoMusicalInfoboxException
-from mw_musical_artist import RedirectException
+from json_entity import JsonEntity
+from genre import Genre
+from label import Label
+from artist_short import ArtistShort
 
-
-class Artist:
+class Artist(JsonEntity):
     """
     The Artist class gets a band name and returns a dictionary
     with a lot of information about the band
     The dictionary is then stored in the database"""
 
-    def __init__(self, band):
-        self.band = band
+    accepted_keys = ['id','name','background','link','genre','label',
+                     'current_member_of','past_member_of','past_members',
+                     'current_members', 'spinoffs', 'spinoff_of']
+    rejected_keys = ['_metadata','members','member_of']
 
-        log_format = ('%(asctime)s - %(levelname)-8s - ' +
-                      self.band + ' - %(funcName)-15s - %(message)s')
-        logging.basicConfig(format=log_format, level=logging.ERROR)
-
-
-
-    ###########################
-    # use the connection factory and return the existing connection
-    def _get_connection(self):
-        if 'mongo_db' not in dir(self):
-            from MongoFactory import mongo_db
-            self.mongo_db = mongo_db
-        return self.mongo_db
+    def __init__(self, doc):
+        super().__init__(doc)
+        self.doc = self.doc # pylint: disable=no-member
 
 
-    def get_from_wikipedia(self, name):
-        """
-        This function gets a band name and returns a dictionary"""
-        try:
-            ret = mw_musical_artist.MWMusicalArtist(name).get_dict()
-            ret['type'] = self._band_or_person(ret)
-            ret = self._normalize_dict(ret)
-        except LookupError:
-            ret = self._normalize_dict(self.get_from_database(name))
-            ret['error'] = 'LookupError'
-        except NoMusicalInfoboxException:
-            ret = self._normalize_dict(self.get_from_database(name))
-            ret['error'] = 'NoMusicalInfoboxException'
-        except RedirectException:
-            ret = self._normalize_dict(self.get_from_database(name))
-            ret['error'] = 'RedirectException'
-        finally:
-            if not ret.get('error'):
-                ret['error'] = ''
-            else:
-                logging.warning('error: %s' , ret['error'], extra={"artist":self.band})
+    @property
+    def collection(self):
+        return 'artist'
 
-        ret['discovered'] = True
-        logging.debug('normalized dict :%s' , ret, extra={"artist":self.band})
-        return ret
-
-
-    # issue#4 given the dict in input, tis funcion returns
+    # issue#4 given the dict in input, this funcion returns
     # 'person' , 'group_or_band', or nothing at all.
-    # It might happens that a band has no Infobox because it was referenced before hand.
-    # In that case, the type must be known already
-    def _band_or_person(self, doc):
+    # It might happens that a band has no Infobox, but alredy
+    # exists in the crawling process because it was referenced before hand.
+    # In that case, the background must be known already.
+    def _band_or_person(self):
         # if the background is there and is valid, that's easy
-        if 'background' in doc:
-            if doc['background'].lower() == 'person':
-                return 'person'
-            if doc['background'].lower() == 'group_or_band':
-                return 'group_or_band'
+        if 'background' in self.doc:
+            if self.doc['background'].lower() == 'person':
+                self.doc['background'] = 'person'
+                return
+            if self.doc['background'].lower() == 'group_or_band':
+                self.doc['background'] = 'group_or_band'
+                return
+            # if the background is not person or group_or_band, we remove it and try to compute it from other fields
+            self.doc.pop('background', None)
         # if the backgroupnd is not valid, we have to figure it out
         # any of the following parameters hints that it's a band or a musician
-        band_params = [ 'current_members', 'past_members', 'spinoffs', 'spinoff_of' ]
-        person_params = [ 'current_member_of', 'past_member_of', 'occupation', 'instrument' ]
-        for param in doc:
+        band_params = [ 'current_members', 'past_members', 'members', 'spinoffs', 'spinoff_of' ]
+        person_params = [ 'current_member_of', 'past_member_of', 'member_of', 'occupation', 'instrument' ]
+        for param in self.doc:
             if param in band_params:
-                return 'group_or_band'
+                self.doc['background'] = 'group_or_band'
+                return
             if param in person_params:
-                return 'person'
+                self.doc['background'] = 'person'
+                return
+
+    def _merge_members(self):
+        # Merge 'current_member_of' and 'past_member_of' into 'member_of'
+        if 'current_member_of' in self.doc or 'past_member_of' in self.doc:
+            self.doc['member_of'] = (self.doc.get('current_member_of', []) +
+                                     self.doc.get('past_member_of', []))
+            self.doc.pop('current_member_of', None)
+            self.doc.pop('past_member_of', None)
+        # Merge 'current_members' and 'past_members' into 'members'
+        if 'current_members' in self.doc or 'past_members' in self.doc:
+            self.doc['members'] = (self.doc.get('current_members', []) +
+                                   self.doc.get('past_members', []))
+            self.doc.pop('current_members', None)
+            self.doc.pop('past_members', None)
 
 
-    def get_from_database(self, name, coll_name='artist', short=False):
+    def _normalize(self):
         """
-        This function gets a band from the database and returns its dictionary"""
-        mongo_db = self._get_connection()
-        if short:
-            coll = mongo_db['artist_short']
+        _normalize in Artist does a bunch of additional things:
+        * It merge the properties:
+          * 'current_member_of','past_member_of' into 'member_of'
+          * 'current_members','past_members' into 'members'
+        * It instantiate Genre and Labels to do sub-normalization
+          of the genres and labels
+        * It sets the background to 'person' or 'group_or_band'
+        """
+        super()._normalize()
+        self._merge_members()
+        self._band_or_person()
+
+        if 'genre' in self.doc:
+            # for each genre in self.doc, instantiate a Genre object.
+            # the constructor will normalize the genre
+            self.doc['genre'] = [ Genre(genre).doc for genre in self.doc['genre'] ]
+
+        if 'label' in self.doc:
+            # for each label in self.doc, instantiate a Label object
+            # the constructor will normalize the label
+            self.doc['label'] = [ Label(label).doc for label in self.doc['label'] ]
+
+        # for these fields, if they have no background yet,
+        # if the artist has members, the members are a person, etc.
+        # the subroutine will normalize and set the background
+        self._normalize_sub_artist('members', 'person')
+        self._normalize_sub_artist('member_of', 'group_or_band')
+        self._normalize_sub_artist('spinoffs', 'group_or_band')
+        self._normalize_sub_artist('spinoff_of', 'group_or_band')
+
+
+    def _normalize_sub_artist(self, index, background):
+        if index in self.doc:
+            artists = []
+            for artist in self.doc[index]:
+                artist_obj = ArtistShort(artist)
+                if 'background' not in artist_obj.doc:
+                    artist_obj.doc['background'] = background
+                artists.append(artist_obj.doc)
+            self.doc[index] = artists
+
+    def _get_query(self):
+        # we override the definition in artist to use link before name
+        if self.doc.get('id') is not None:
+            return {'_id': self.doc['id']}
+        elif self.doc.get('link') is not None:
+            return {'link': self.doc['link']}
         else:
-            coll = mongo_db[coll_name]
+            return {'name': self.doc['name']}
 
-        search = {"name":name}
-        # workaround bug 35444921: use find instead of find_one
-        # or we get ORA-40666 in some circumstances
-        res = list(coll.find(search))
-        # if it's already there, we rather set the artist with the full details of the result
-        if len(res) == 1:
-            return res[0]
-        # if we have more than one document by querying my unique key, we have a problem
-        assert len(res) == 0
-        return False
+    def upsert(self):
+        self._get_connection()
+        coll = self.mongo_db[self.collection]
 
+        # as the referenced n:m relationship cannot be inserted directly
+        # we have to insert the referenced documents first.
+        # We don't care about upserting them, as we just need their existence.
+        # the insert function silently exists if the document already exists.
+        # any updates will eventually go through the main document upsert.
+        if 'label' in self.doc:
+            for label in self.doc['label']:
+                Label(label).insert()
+        if 'genre' in self.doc:
+            for genre in self.doc['genre']:
+                Genre(genre).insert()
+        if 'member_of' in self.doc:
+            for artist in self.doc['member_of']:
+                if 'link' not in artist:
+                    artist['link'] = ''
+                ArtistShort(artist).insert()
+        if 'members' in self.doc:
+            for artist in self.doc['members']:
+                if 'link' not in artist:
+                    artist['link'] = ''
+                ArtistShort(artist).insert()
+        if 'spinoffs' in self.doc:
+            for artist in self.doc['spinoffs']:
+                if 'link' not in artist:
+                    artist['link'] = ''
+                ArtistShort(artist).insert()
+        if 'spinoff_of' in self.doc:
+            for artist in self.doc['spinoff_of']:
+                if 'link' not in artist:
+                    artist['link'] = ''
+                ArtistShort(artist).insert()
 
-    def _normalize_dict(self, doc, coll_name='artist'):
-        # the exercise of filtering the accepted columns was relevant until 23.2.
-        # in 23.3 the flex column allows for unknown values
-        # that are unnested directly into the document.
-        # as we are auto-referencing artists, the flex column changes the ETAG
-        # of the table (to check with the devs), so I'll keep the col as non-flex
-        if coll_name == 'artist':
-            accepted_keys = ['id','name','type','link','discovered','genre','label',
-                             'current_member_of','past_member_of','past_members',
-                             'current_members', 'spinoffs', 'spinoff_of']
-            rejected_keys = ['_id','_metadata','members','member_of', 'error']
-        else:
-            # this is just a bad design hack. I should have splitted
-            #  artists, genres, and labels into different classes
-            accepted_keys = ['id','name']
+        # now there's the catch_:
+        # even if an artist has been previously inserted through a short insert,
+        # it might still have relations to other artists due to other
+        # inserts. So we have to merge into the new document (self.doc)
+        # the entries from the old one (query_result)
+        # especially the relations:
+        # 'member_of', 'members', 'spinoffs', 'spinoff_of'
+        # so we don't miss any relations.
+        # we can't use @nodelete as a safeguard in the
+        # duality views, not to miss any relation by mistake, because the relation_id might change.
+        query = self._get_query()
+        query_result = coll.find_one(query)
 
-        ret = dict()
-        for name, value in doc.items():
-            if name in accepted_keys:
-                # we want to merge current and past members
-                if name in ['current_member_of','past_member_of']:
-                    if not ret.get('member_of'):
-                        ret['member_of'] = list()
-                    ret['member_of'].extend(value)
-                elif name in ['current_members','past_members']:
-                    if not ret.get('members'):
-                        ret['members'] = list()
-                    ret['members'].extend(value)
-                elif name in ['spinoffs','spinoff_of','genre','label']:
-                    #don't add the array if empty
-                    if len(value) != 0:
-                        ret[name] = value
-                else:
-                    ret[name] = value
-            else:
-                # add the column even if unknown, as the flex column allows for it
-                if coll_name == 'artist':
-                    if name not in rejected_keys:
-                        if not ret.get('extras'):
-                            ret['extras'] = dict()
-                        ret['extras'][name] = value
-        return ret
+        if query_result:
+            # here we must remove id and members_id from query_result
+            # I don't bother to check if they exist 
+            for field in ['member_of', 'members', 'spinoffs', 'spinoff_of']:
+                if field in query_result:
+                    if field in self.doc:
+                        self.doc[field] = self._merge_arrays_by_name(self.doc[field],query_result[field])
 
+            self.doc['id'] = query_result['_id']
 
-    ########################
-    # this insert a dict into a coll name. no questions
-    def _insert_dict(self,doc,coll_name):
-        mongo_db = self._get_connection()
-
-        ## temporary, remove after debug, remove after debug
-        coll_temp = coll_name.replace('_short','')
-        coll = mongo_db[coll_temp]
-        #coll = mongo_db[coll_name]
-
-        logging.debug('inserting dict :%s - into collation %s',
-                      doc, coll_name, extra={"artist":self.band})
-        coll.insert_one(doc)
-        logging.debug('inserted dict :%s - into collation %s',
-                      doc, coll_name, extra={"artist":self.band})
-        # insert_one modifies the dict with the _id included
-        ret = self.get_from_database(doc['name'], coll_temp)
-
-        logging.debug('got from database before normalization:%s',
-                      ret, extra={"artist":self.band})
-        ret = self._normalize_dict(ret, coll_temp)
-        logging.debug('got from database after normalization:%s',
-                      ret, extra={"artist":self.band})
-        #ret['error'] = ''
-        logging.debug('returning :%s' , ret, extra={"artist":self.band})
-        return ret
+        # not sure it's the best place to put this, but if everything is OK, we can set discovered=true
+        self.doc['discovered'] = True
+        super().upsert()
 
 
-
-    def upsert_artist(self,doc):
-        """ This function upserts an artist in the database"""
-
-        # we try to update the sub members only if there were no errors
-        # otherwise we only have to update discovered and error
-        updated = doc.copy()
-        if doc['error'] != '':
-            self._upsert_dict(updated,'artist')
-            return
-        for prop in ["member_of", "members", "spinoff_of", "spinoffs"]:
-            if prop in doc:
-                logging.debug('%s is there.' , prop, extra={"artist":self.band})
-                updated[prop] = list()
-                for _, value in enumerate(doc[prop]):
-                    # if there is an artist relation, upsert it
-                    # issue#4: I prepopulate the type, as when it's referenced
-                    # I know already what it is
-                    if prop == "members":
-                        value['type']='person'
-                    if prop == "member_of":
-                        value['type']='group_or_band'
-                    if prop in ["spinoff_of" , "spinoffs"]:
-                        value['type']='group_or_band'
-                    ret = self._upsert_dict(value,'artist_short')
-                    if not ret.get('error'):
-                        ret['error'] = ''
-                    if '_id' in ret:
-                        ret['id'] = ret['_id']
-                        del ret['_id']
-                    updated[prop].append(ret)
-
-        for prop in ["genre", "label"]:
-            if prop in doc:
-                logging.debug('%s is there.' , prop, extra={"artist":self.band})
-                updated[prop] = list()
-                for _, value in enumerate(doc[prop]):
-                    # insert in genres or labels
-                    if 'link' in value:
-                        del value['link']
-                    ret = self._upsert_dict(value, prop )
-                    if '_id' in ret:
-                        ret['id'] = ret['_id']
-                        del ret['_id']
-                    updated[prop].append(ret)
-        logging.debug('new doc: %s', updated, extra={"artist":self.band})
-        self._upsert_dict(updated,'artist')
-
-
-
-    # we pass here a relations [e.g. a genre or an artist
-    # or a label] which we eventually insert if they are not there
-    # it must return the definitive record for update
-    def _upsert_dict(self,relation, coll_name):
-        mongo_db = self._get_connection()
-        coll = mongo_db[coll_name]
-
-        logging.debug('upserting dict :%s - into collation %s' ,
-                      relation, coll_name, extra={"artist":self.band})
-        # the relation name is unique so we can use it as a key as well
-        if relation.get('link') is not None:
-            res = list(coll.find({'link': relation.get('link')}))
-            if len(res) == 0:
-                res = list(coll.find({'name': relation.get('name')}))
-        else:
-            res = list(coll.find({'name': relation.get('name')}))
-        if len(res) == 1:
-            logging.debug('we already have the relation :%s ' , res[0] , extra={"artist":self.band})
-            # we have already a relation, we rather use the relation detail from the DB
-            copy = res[0].copy()
-            del copy['_id']
-            del copy['_metadata']
-            logging.debug('copy before merge is :%s ' , copy , extra={"artist":self.band})
-            copy.update(relation)
-            if '_id' in copy:
-                del copy['_id']
-            logging.debug('copy after merge is :%s ' , copy , extra={"artist":self.band})
-
-            logging.debug('need to update collextion %s document id %s with %s' ,
-                          coll_name, res[0]['_id'], copy , extra={"artist":self.band})
-            self._update_dict(res[0]['_id'], copy, coll_name)
-            copy['id'] = res[0]['_id']
-            logging.debug('returning %s' , copy , extra={"artist":self.band})
-            return copy
-
-        else:
-            # if we have more than one document by querying my unique key, we have a problem
-            assert len(res)==0
-            assert relation['name'] != ''
-            return self._insert_dict(relation, coll_name)
-
-
-    def _strip_none(self,doc):
-        return {key: value for key, value in doc.items() if value is not None}
-
-
-    def _update_dict(self,doc_id, doc_set, coll_name):
-        mongo_db = self._get_connection()
-        coll = mongo_db[coll_name]
-        logging.debug('updating doc id :%s - with %s - in collection %s' ,
-                      doc_id, doc_set, coll_name, extra={"artist":self.band})
-        coll.update_one({'_id':doc_id},{'$set':self._strip_none(doc_set)})
-        logging.debug('updated doc id :%s - with %s - in collection %s' ,
-                      doc_id, doc_set, coll_name, extra={"artist":self.band})
+    def _merge_arrays_by_name(self,array1,array2):
+        # merge array2 into array1
+        existing_names = {d["name"] for d in array1}
+        for dictio in array2:
+            # remove id from dictio only if it exists
+            if 'id' in dictio:
+                del dictio['id']
+            if 'id' in dictio:
+                del dictio['members_id']
+            if dictio["name"] not in existing_names:
+                array1.append(dictio)
+                existing_names.add(dictio["name"])
+        return array1

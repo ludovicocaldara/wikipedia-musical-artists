@@ -115,12 +115,6 @@ class MWMusicalArtist:
         if 'name' not in self.doc:
             self.doc['name'] = self.link
 
-        # In the end, we mark the page as discovered.
-        # the reason is that once we insert the document into the database,
-        # we don't want to re-discover it
-        self.doc['discovered'] = True
-        logging.debug('Discovered dict: %s', self.doc, extra={"artist":self.link})
-
 
     def _find_infoboxes(self, text):
         """ 

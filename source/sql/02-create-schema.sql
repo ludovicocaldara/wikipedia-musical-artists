@@ -18,25 +18,31 @@ drop table if exists artist_labels;
 drop table if exists labels;
 drop table if exists artist_genres;
 drop table if exists genres;
+drop table if exists artists_crawling;
 drop table if exists artists;
 
-drop domain if exists artist_type;
+drop domain if exists artist_background;
 
-create domain artist_type as varchar2(15) 
-  constraint artist_type_chk check (artist_type in ('person','group_or_band'))
-  order      artist_type;
+create domain artist_background as varchar2(15) 
+  constraint artist_background_chk check (artist_background in ('person','group_or_band'))
+  order      artist_background;
 
 create table artists (
   id               varchar2(30) not null ,
   name             varchar2(255) not null unique,
-  link             varchar2(255),
-  type             domain artist_type not null,
-  extras           json,
-  discovered       boolean default false,
-  error            varchar2(30),
+  link             varchar2(255) not null unique,
+  background       domain artist_background not null,
+  extras           json (OBJECT),
   constraint artists_pk primary key(id)
 );
 
+create table artists_crawling (
+  id               varchar2(30) not null ,
+  discovered       boolean default false,
+  error            varchar2(30),
+  constraint artists_crawling_pk primary key(id),
+  constraint artists_crawling_fk foreign key(id) references artists(id)
+);
 
 /*
 create or replace trigger artist_insert_trg before insert on artists for each row
