@@ -1,12 +1,4 @@
 mwparserfromhell==0.6.6
 pymongo==4.10.1
-wptools==0.4.17
-oracledb
-jupyterlab
-pandas
-ipython-sql
-prettytable
-pyvis
-matplotlib
 logging
-xmltodict
+python-dotenv

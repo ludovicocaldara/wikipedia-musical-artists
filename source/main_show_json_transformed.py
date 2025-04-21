@@ -4,33 +4,40 @@ this script shows the result of the transformation
 of a raw JSON document before being inserted into the DB
 """
 import sys
-import json
+import ssl
 import logging
+import pymongo
 import artist
-
-from artist import NoMusicalInfoboxException
+import mw_musical_artist
 
 FORMAT = '%(asctime)s - %(levelname)-8s - %(funcName)-15s - %(message)s'
 logging.basicConfig(format=FORMAT, level=logging.WARN)
 
 
-
 def process_band(name):
     """function processing a single band during crawling"""
     logging.info('Processing band [%s]', name)
-    band = artist.Artist(name)
+
+
     try:
-        doc = band.get_from_wikipedia(name)
+        band_dict = mw_musical_artist.MWMusicalArtist(name).get_dict()
     except LookupError:
         logging.warning('LookupError: the page [%s] does not exist on Wikipedia', name)
-    except NoMusicalInfoboxException:
+    except mw_musical_artist.NoMusicalInfoboxException:
         logging.warning('NoMusicalInfoboxException: the page [%s] does not have a Musical Infobox'
                         , name)
+
     else:
-        print(json.dumps(doc, indent=4))
+        try:
+            band = artist.Artist(band_dict)
+            band.upsert()
+        except pymongo.errors.AutoReconnect:
+            logging.error('AutoReconnect: the database is not reachable')
+        except ssl.SSLEOFError:
+            logging.error('SSLEOFError: the database is not reachable')
 
-
-args = sys.argv
+# using args by reference then deleting one messes with the debugger
+args = sys.argv.copy()
 
 del args[0]
 
