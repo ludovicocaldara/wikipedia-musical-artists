@@ -73,8 +73,9 @@ else:
     while iterations > 0:
         from MongoFactory import mongo_db
         coll = mongo_db['artist_crawling']
-        
-        bands_to_discover = coll.find({'discovered': {'$exists': False}, 'error': {'$exists': False}}).limit(limit)
+
+        bands_to_discover = coll.find({'discovered': {'$exists': False},
+                                       'error': {'$exists': False}}).limit(limit)
 
         for new_band in bands_to_discover:
             print(new_band['name'] + ' ' + new_band['link'])

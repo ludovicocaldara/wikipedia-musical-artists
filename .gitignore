@@ -6,6 +6,7 @@ __pycache__/
 
 .terraform*
 
+.env
 .ipynb_checkpoints/
 
 .venv/
